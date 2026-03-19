@@ -187,6 +187,20 @@ func (_u *S3BackendUpdate) SetNillableMountPath(v *string) *S3BackendUpdate {
 	return _u
 }
 
+// SetIsPrimary sets the "is_primary" field.
+func (_u *S3BackendUpdate) SetIsPrimary(v bool) *S3BackendUpdate {
+	_u.mutation.SetIsPrimary(v)
+	return _u
+}
+
+// SetNillableIsPrimary sets the "is_primary" field if the given value is not nil.
+func (_u *S3BackendUpdate) SetNillableIsPrimary(v *bool) *S3BackendUpdate {
+	if v != nil {
+		_u.SetIsPrimary(*v)
+	}
+	return _u
+}
+
 // SetIsEnabled sets the "is_enabled" field.
 func (_u *S3BackendUpdate) SetIsEnabled(v bool) *S3BackendUpdate {
 	_u.mutation.SetIsEnabled(v)
@@ -378,6 +392,9 @@ func (_u *S3BackendUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.MountPath(); ok {
 		_spec.SetField(s3backend.FieldMountPath, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.IsPrimary(); ok {
+		_spec.SetField(s3backend.FieldIsPrimary, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.IsEnabled(); ok {
 		_spec.SetField(s3backend.FieldIsEnabled, field.TypeBool, value)
@@ -611,6 +628,20 @@ func (_u *S3BackendUpdateOne) SetNillableMountPath(v *string) *S3BackendUpdateOn
 	return _u
 }
 
+// SetIsPrimary sets the "is_primary" field.
+func (_u *S3BackendUpdateOne) SetIsPrimary(v bool) *S3BackendUpdateOne {
+	_u.mutation.SetIsPrimary(v)
+	return _u
+}
+
+// SetNillableIsPrimary sets the "is_primary" field if the given value is not nil.
+func (_u *S3BackendUpdateOne) SetNillableIsPrimary(v *bool) *S3BackendUpdateOne {
+	if v != nil {
+		_u.SetIsPrimary(*v)
+	}
+	return _u
+}
+
 // SetIsEnabled sets the "is_enabled" field.
 func (_u *S3BackendUpdateOne) SetIsEnabled(v bool) *S3BackendUpdateOne {
 	_u.mutation.SetIsEnabled(v)
@@ -832,6 +863,9 @@ func (_u *S3BackendUpdateOne) sqlSave(ctx context.Context) (_node *S3Backend, er
 	}
 	if value, ok := _u.mutation.MountPath(); ok {
 		_spec.SetField(s3backend.FieldMountPath, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.IsPrimary(); ok {
+		_spec.SetField(s3backend.FieldIsPrimary, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.IsEnabled(); ok {
 		_spec.SetField(s3backend.FieldIsEnabled, field.TypeBool, value)

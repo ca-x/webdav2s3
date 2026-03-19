@@ -121,6 +121,20 @@ func (_c *S3BackendCreate) SetMountPath(v string) *S3BackendCreate {
 	return _c
 }
 
+// SetIsPrimary sets the "is_primary" field.
+func (_c *S3BackendCreate) SetIsPrimary(v bool) *S3BackendCreate {
+	_c.mutation.SetIsPrimary(v)
+	return _c
+}
+
+// SetNillableIsPrimary sets the "is_primary" field if the given value is not nil.
+func (_c *S3BackendCreate) SetNillableIsPrimary(v *bool) *S3BackendCreate {
+	if v != nil {
+		_c.SetIsPrimary(*v)
+	}
+	return _c
+}
+
 // SetIsEnabled sets the "is_enabled" field.
 func (_c *S3BackendCreate) SetIsEnabled(v bool) *S3BackendCreate {
 	_c.mutation.SetIsEnabled(v)
@@ -235,6 +249,10 @@ func (_c *S3BackendCreate) defaults() {
 		v := s3backend.DefaultPathStyle
 		_c.mutation.SetPathStyle(v)
 	}
+	if _, ok := _c.mutation.IsPrimary(); !ok {
+		v := s3backend.DefaultIsPrimary
+		_c.mutation.SetIsPrimary(v)
+	}
 	if _, ok := _c.mutation.IsEnabled(); !ok {
 		v := s3backend.DefaultIsEnabled
 		_c.mutation.SetIsEnabled(v)
@@ -300,6 +318,9 @@ func (_c *S3BackendCreate) check() error {
 		if err := s3backend.MountPathValidator(v); err != nil {
 			return &ValidationError{Name: "mount_path", err: fmt.Errorf(`ent: validator failed for field "S3Backend.mount_path": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.IsPrimary(); !ok {
+		return &ValidationError{Name: "is_primary", err: errors.New(`ent: missing required field "S3Backend.is_primary"`)}
 	}
 	if _, ok := _c.mutation.IsEnabled(); !ok {
 		return &ValidationError{Name: "is_enabled", err: errors.New(`ent: missing required field "S3Backend.is_enabled"`)}
@@ -378,6 +399,10 @@ func (_c *S3BackendCreate) createSpec() (*S3Backend, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.MountPath(); ok {
 		_spec.SetField(s3backend.FieldMountPath, field.TypeString, value)
 		_node.MountPath = value
+	}
+	if value, ok := _c.mutation.IsPrimary(); ok {
+		_spec.SetField(s3backend.FieldIsPrimary, field.TypeBool, value)
+		_node.IsPrimary = value
 	}
 	if value, ok := _c.mutation.IsEnabled(); ok {
 		_spec.SetField(s3backend.FieldIsEnabled, field.TypeBool, value)

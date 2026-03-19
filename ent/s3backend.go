@@ -35,8 +35,10 @@ type S3Backend struct {
 	PathStyle bool `json:"path_style,omitempty"`
 	// Optional prefix for all keys in this backend
 	KeyPrefix string `json:"key_prefix,omitempty"`
-	// Virtual path to mount this backend (e.g., /minio)
+	// Virtual path to mount (e.g., /backup). Multiple backends with same path = replication
 	MountPath string `json:"mount_path,omitempty"`
+	// Primary backend for reading when multiple backends share same mount_path
+	IsPrimary bool `json:"is_primary,omitempty"`
 	// Whether this backend is active
 	IsEnabled bool `json:"is_enabled,omitempty"`
 	// Whether this backend is read-only
@@ -74,7 +76,7 @@ func (*S3Backend) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case s3backend.FieldPathStyle, s3backend.FieldIsEnabled, s3backend.FieldIsReadonly:
+		case s3backend.FieldPathStyle, s3backend.FieldIsPrimary, s3backend.FieldIsEnabled, s3backend.FieldIsReadonly:
 			values[i] = new(sql.NullBool)
 		case s3backend.FieldID:
 			values[i] = new(sql.NullInt64)
@@ -162,6 +164,12 @@ func (_m *S3Backend) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field mount_path", values[i])
 			} else if value.Valid {
 				_m.MountPath = value.String
+			}
+		case s3backend.FieldIsPrimary:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field is_primary", values[i])
+			} else if value.Valid {
+				_m.IsPrimary = value.Bool
 			}
 		case s3backend.FieldIsEnabled:
 			if value, ok := values[i].(*sql.NullBool); !ok {
@@ -254,6 +262,9 @@ func (_m *S3Backend) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("mount_path=")
 	builder.WriteString(_m.MountPath)
+	builder.WriteString(", ")
+	builder.WriteString("is_primary=")
+	builder.WriteString(fmt.Sprintf("%v", _m.IsPrimary))
 	builder.WriteString(", ")
 	builder.WriteString("is_enabled=")
 	builder.WriteString(fmt.Sprintf("%v", _m.IsEnabled))

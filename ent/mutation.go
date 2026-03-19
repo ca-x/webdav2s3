@@ -45,6 +45,7 @@ type S3BackendMutation struct {
 	path_style    *bool
 	key_prefix    *string
 	mount_path    *string
+	is_primary    *bool
 	is_enabled    *bool
 	is_readonly   *bool
 	created_at    *time.Time
@@ -555,6 +556,42 @@ func (m *S3BackendMutation) ResetMountPath() {
 	m.mount_path = nil
 }
 
+// SetIsPrimary sets the "is_primary" field.
+func (m *S3BackendMutation) SetIsPrimary(b bool) {
+	m.is_primary = &b
+}
+
+// IsPrimary returns the value of the "is_primary" field in the mutation.
+func (m *S3BackendMutation) IsPrimary() (r bool, exists bool) {
+	v := m.is_primary
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIsPrimary returns the old "is_primary" field's value of the S3Backend entity.
+// If the S3Backend object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BackendMutation) OldIsPrimary(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIsPrimary is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIsPrimary requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIsPrimary: %w", err)
+	}
+	return oldValue.IsPrimary, nil
+}
+
+// ResetIsPrimary resets all changes to the "is_primary" field.
+func (m *S3BackendMutation) ResetIsPrimary() {
+	m.is_primary = nil
+}
+
 // SetIsEnabled sets the "is_enabled" field.
 func (m *S3BackendMutation) SetIsEnabled(b bool) {
 	m.is_enabled = &b
@@ -787,7 +824,7 @@ func (m *S3BackendMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *S3BackendMutation) Fields() []string {
-	fields := make([]string, 0, 14)
+	fields := make([]string, 0, 15)
 	if m.name != nil {
 		fields = append(fields, s3backend.FieldName)
 	}
@@ -817,6 +854,9 @@ func (m *S3BackendMutation) Fields() []string {
 	}
 	if m.mount_path != nil {
 		fields = append(fields, s3backend.FieldMountPath)
+	}
+	if m.is_primary != nil {
+		fields = append(fields, s3backend.FieldIsPrimary)
 	}
 	if m.is_enabled != nil {
 		fields = append(fields, s3backend.FieldIsEnabled)
@@ -858,6 +898,8 @@ func (m *S3BackendMutation) Field(name string) (ent.Value, bool) {
 		return m.KeyPrefix()
 	case s3backend.FieldMountPath:
 		return m.MountPath()
+	case s3backend.FieldIsPrimary:
+		return m.IsPrimary()
 	case s3backend.FieldIsEnabled:
 		return m.IsEnabled()
 	case s3backend.FieldIsReadonly:
@@ -895,6 +937,8 @@ func (m *S3BackendMutation) OldField(ctx context.Context, name string) (ent.Valu
 		return m.OldKeyPrefix(ctx)
 	case s3backend.FieldMountPath:
 		return m.OldMountPath(ctx)
+	case s3backend.FieldIsPrimary:
+		return m.OldIsPrimary(ctx)
 	case s3backend.FieldIsEnabled:
 		return m.OldIsEnabled(ctx)
 	case s3backend.FieldIsReadonly:
@@ -981,6 +1025,13 @@ func (m *S3BackendMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetMountPath(v)
+		return nil
+	case s3backend.FieldIsPrimary:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIsPrimary(v)
 		return nil
 	case s3backend.FieldIsEnabled:
 		v, ok := value.(bool)
@@ -1109,6 +1160,9 @@ func (m *S3BackendMutation) ResetField(name string) error {
 		return nil
 	case s3backend.FieldMountPath:
 		m.ResetMountPath()
+		return nil
+	case s3backend.FieldIsPrimary:
+		m.ResetIsPrimary()
 		return nil
 	case s3backend.FieldIsEnabled:
 		m.ResetIsEnabled()

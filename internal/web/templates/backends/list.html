@@ -6,43 +6,57 @@
     </div>
 
     <div class="card">
-        <table>
-            <thead>
-                <tr>
-                    <th>Name</th>
-                    <th>Mount Path</th>
-                    <th>Endpoint</th>
-                    <th>Bucket</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                <template x-for="b in backends" :key="b.id">
-                    <tr>
-                        <td x-text="b.name"></td>
-                        <td x-text="b.mount_path"></td>
-                        <td x-text="b.endpoint || 'AWS S3'"></td>
-                        <td x-text="b.bucket"></td>
-                        <td>
-                            <span class="badge" :class="b.is_enabled ? 'badge-green' : 'badge-red'" x-text="b.is_enabled ? 'Active' : 'Disabled'"></span>
-                        </td>
-                        <td class="actions">
-                            <button class="btn btn-secondary" @click="testBackend(b.id, b.name)">Test</button>
-                            <a :href="'/admin/backends/' + b.id" class="btn btn-primary">Edit</a>
-                            <button class="btn btn-danger" @click="deleteBackend(b.id, b.name)">Delete</button>
-                        </td>
-                    </tr>
-                </template>
-            </tbody>
-        </table>
-        <p x-show="backends.length === 0" style="padding: 20px; text-align: center; color: #6b7280;">No backends configured.</p>
+        <h2>Mount Paths</h2>
+        <p style="color: #6b7280; margin-bottom: 16px;">Multiple backends on the same path = write replication</p>
+
+        <template x-for="(backends, mountPath) in mountPaths" :key="mountPath">
+            <div style="border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 16px; overflow: hidden;">
+                <div style="background: #f9fafb; padding: 12px 16px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-weight: 600; font-family: monospace;" x-text="mountPath"></span>
+                    <span class="badge" :class="backends.length > 1 ? 'badge-blue' : 'badge-green'" x-text="backends.length > 1 ? 'Replicated (' + backends.length + ')' : 'Single'"></span>
+                </div>
+                <table style="margin: 0;">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Bucket</th>
+                            <th>Primary</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="b in backends" :key="b.id">
+                            <tr>
+                                <td x-text="b.name"></td>
+                                <td x-text="b.bucket"></td>
+                                <td>
+                                    <span x-show="b.is_primary" class="badge badge-blue">Primary</span>
+                                    <span x-show="!b.is_primary" style="color: #9ca3af;">-</span>
+                                </td>
+                                <td>
+                                    <span class="badge" :class="b.is_enabled ? 'badge-green' : 'badge-red'" x-text="b.is_enabled ? 'Active' : 'Disabled'"></span>
+                                </td>
+                                <td class="actions">
+                                    <button class="btn btn-secondary" @click="testBackend(b.id, b.name)">Test</button>
+                                    <a :href="'/admin/backends/' + b.id" class="btn btn-primary">Edit</a>
+                                    <button class="btn btn-danger" @click="deleteBackend(b.id, b.name)">Delete</button>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </template>
+
+        <p x-show="Object.keys(mountPaths).length === 0" style="padding: 20px; text-align: center; color: #6b7280;">No backends configured.</p>
     </div>
 </div>
 <script>
 function backends() {
     return {
         backends: [],
+        mountPaths: {},
         async init() {
             const token = localStorage.getItem('token');
             if (!token) { window.location.href = '/admin/login'; return; }
@@ -55,6 +69,15 @@ function backends() {
             });
             if (resp.status === 401) { window.location.href = '/admin/login'; return; }
             this.backends = await resp.json();
+
+            // Group by mount_path
+            this.mountPaths = {};
+            for (const b of this.backends) {
+                if (!this.mountPaths[b.mount_path]) {
+                    this.mountPaths[b.mount_path] = [];
+                }
+                this.mountPaths[b.mount_path].push(b);
+            }
         },
         async testBackend(id, name) {
             const token = localStorage.getItem('token');

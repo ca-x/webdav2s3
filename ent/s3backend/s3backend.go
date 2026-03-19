@@ -34,6 +34,8 @@ const (
 	FieldKeyPrefix = "key_prefix"
 	// FieldMountPath holds the string denoting the mount_path field in the database.
 	FieldMountPath = "mount_path"
+	// FieldIsPrimary holds the string denoting the is_primary field in the database.
+	FieldIsPrimary = "is_primary"
 	// FieldIsEnabled holds the string denoting the is_enabled field in the database.
 	FieldIsEnabled = "is_enabled"
 	// FieldIsReadonly holds the string denoting the is_readonly field in the database.
@@ -66,6 +68,7 @@ var Columns = []string{
 	FieldPathStyle,
 	FieldKeyPrefix,
 	FieldMountPath,
+	FieldIsPrimary,
 	FieldIsEnabled,
 	FieldIsReadonly,
 	FieldCreatedAt,
@@ -103,6 +106,8 @@ var (
 	DefaultPathStyle bool
 	// MountPathValidator is a validator for the "mount_path" field. It is called by the builders before save.
 	MountPathValidator func(string) error
+	// DefaultIsPrimary holds the default value on creation for the "is_primary" field.
+	DefaultIsPrimary bool
 	// DefaultIsEnabled holds the default value on creation for the "is_enabled" field.
 	DefaultIsEnabled bool
 	// DefaultIsReadonly holds the default value on creation for the "is_readonly" field.
@@ -171,6 +176,11 @@ func ByKeyPrefix(opts ...sql.OrderTermOption) OrderOption {
 // ByMountPath orders the results by the mount_path field.
 func ByMountPath(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldMountPath, opts...).ToFunc()
+}
+
+// ByIsPrimary orders the results by the is_primary field.
+func ByIsPrimary(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldIsPrimary, opts...).ToFunc()
 }
 
 // ByIsEnabled orders the results by the is_enabled field.

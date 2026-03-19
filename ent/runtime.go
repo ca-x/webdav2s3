@@ -44,20 +44,24 @@ func init() {
 	s3backendDescMountPath := s3backendFields[9].Descriptor()
 	// s3backend.MountPathValidator is a validator for the "mount_path" field. It is called by the builders before save.
 	s3backend.MountPathValidator = s3backendDescMountPath.Validators[0].(func(string) error)
+	// s3backendDescIsPrimary is the schema descriptor for is_primary field.
+	s3backendDescIsPrimary := s3backendFields[10].Descriptor()
+	// s3backend.DefaultIsPrimary holds the default value on creation for the is_primary field.
+	s3backend.DefaultIsPrimary = s3backendDescIsPrimary.Default.(bool)
 	// s3backendDescIsEnabled is the schema descriptor for is_enabled field.
-	s3backendDescIsEnabled := s3backendFields[10].Descriptor()
+	s3backendDescIsEnabled := s3backendFields[11].Descriptor()
 	// s3backend.DefaultIsEnabled holds the default value on creation for the is_enabled field.
 	s3backend.DefaultIsEnabled = s3backendDescIsEnabled.Default.(bool)
 	// s3backendDescIsReadonly is the schema descriptor for is_readonly field.
-	s3backendDescIsReadonly := s3backendFields[11].Descriptor()
+	s3backendDescIsReadonly := s3backendFields[12].Descriptor()
 	// s3backend.DefaultIsReadonly holds the default value on creation for the is_readonly field.
 	s3backend.DefaultIsReadonly = s3backendDescIsReadonly.Default.(bool)
 	// s3backendDescCreatedAt is the schema descriptor for created_at field.
-	s3backendDescCreatedAt := s3backendFields[12].Descriptor()
+	s3backendDescCreatedAt := s3backendFields[13].Descriptor()
 	// s3backend.DefaultCreatedAt holds the default value on creation for the created_at field.
 	s3backend.DefaultCreatedAt = s3backendDescCreatedAt.Default.(func() time.Time)
 	// s3backendDescUpdatedAt is the schema descriptor for updated_at field.
-	s3backendDescUpdatedAt := s3backendFields[13].Descriptor()
+	s3backendDescUpdatedAt := s3backendFields[14].Descriptor()
 	// s3backend.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	s3backend.DefaultUpdatedAt = s3backendDescUpdatedAt.Default.(func() time.Time)
 	// s3backend.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

@@ -105,6 +105,11 @@ func MountPath(v string) predicate.S3Backend {
 	return predicate.S3Backend(sql.FieldEQ(FieldMountPath, v))
 }
 
+// IsPrimary applies equality check predicate on the "is_primary" field. It's identical to IsPrimaryEQ.
+func IsPrimary(v bool) predicate.S3Backend {
+	return predicate.S3Backend(sql.FieldEQ(FieldIsPrimary, v))
+}
+
 // IsEnabled applies equality check predicate on the "is_enabled" field. It's identical to IsEnabledEQ.
 func IsEnabled(v bool) predicate.S3Backend {
 	return predicate.S3Backend(sql.FieldEQ(FieldIsEnabled, v))
@@ -748,6 +753,16 @@ func MountPathEqualFold(v string) predicate.S3Backend {
 // MountPathContainsFold applies the ContainsFold predicate on the "mount_path" field.
 func MountPathContainsFold(v string) predicate.S3Backend {
 	return predicate.S3Backend(sql.FieldContainsFold(FieldMountPath, v))
+}
+
+// IsPrimaryEQ applies the EQ predicate on the "is_primary" field.
+func IsPrimaryEQ(v bool) predicate.S3Backend {
+	return predicate.S3Backend(sql.FieldEQ(FieldIsPrimary, v))
+}
+
+// IsPrimaryNEQ applies the NEQ predicate on the "is_primary" field.
+func IsPrimaryNEQ(v bool) predicate.S3Backend {
+	return predicate.S3Backend(sql.FieldNEQ(FieldIsPrimary, v))
 }
 
 // IsEnabledEQ applies the EQ predicate on the "is_enabled" field.

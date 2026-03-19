@@ -2,6 +2,8 @@
 
 A WebDAV server backed by S3-compatible storage with multi-backend support and a web management UI.
 
+**[中文文档 (Chinese Documentation)](README_CN.md)**
+
 ## Features
 
 - **Multi-backend support** - Configure multiple S3 backends (AWS S3, MinIO, Cloudflare R2, etc.)

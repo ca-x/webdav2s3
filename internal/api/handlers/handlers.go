@@ -11,16 +11,17 @@ import (
 	"github.com/go-chi/jwtauth/v5"
 
 	"github.com/example/webdav-s3/ent"
+	"github.com/example/webdav-s3/ent/s3backend"
 	"github.com/example/webdav-s3/ent/user"
 	"github.com/example/webdav-s3/internal/s3client"
 	"github.com/example/webdav-s3/pkg/auth"
 )
 
 type Handler struct {
-	db        *ent.Client
-	pool      *s3client.Pool
-	jwtAuth   *jwtauth.JWTAuth
-	tokenTTL  time.Duration
+	db       *ent.Client
+	pool     *s3client.Pool
+	jwtAuth  *jwtauth.JWTAuth
+	tokenTTL time.Duration
 }
 
 // NewHandler creates a new API handler.
@@ -43,8 +44,8 @@ type LoginRequest struct {
 }
 
 type LoginResponse struct {
-	Token     string `json:"token"`
-	ExpiresAt int64  `json:"expires_at"`
+	Token     string   `json:"token"`
+	ExpiresAt int64    `json:"expires_at"`
 	User      UserInfo `json:"user"`
 }
 
@@ -141,40 +142,44 @@ func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
 // ─────────────────────────────────────────────
 
 type BackendResponse struct {
-	ID          int    `json:"id"`
-	Name        string `json:"name"`
-	Endpoint    string `json:"endpoint"`
-	Region      string `json:"region"`
-	Bucket      string `json:"bucket"`
-	PathStyle   bool   `json:"path_style"`
-	KeyPrefix   string `json:"key_prefix"`
-	MountPath   string `json:"mount_path"`
-	IsEnabled   bool   `json:"is_enabled"`
-	IsReadonly  bool   `json:"is_readonly"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
+	ID        int    `json:"id"`
+	Name      string `json:"name"`
+	Endpoint  string `json:"endpoint"`
+	Region    string `json:"region"`
+	Bucket    string `json:"bucket"`
+	PathStyle bool   `json:"path_style"`
+	KeyPrefix string `json:"key_prefix"`
+	MountPath string `json:"mount_path"`
+	IsPrimary bool   `json:"is_primary"`
+	IsEnabled bool   `json:"is_enabled"`
+	IsReadonly bool  `json:"is_readonly"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
 }
 
 func backendToResponse(b *ent.S3Backend) BackendResponse {
 	return BackendResponse{
-		ID:          b.ID,
-		Name:        b.Name,
-		Endpoint:    b.Endpoint,
-		Region:      b.Region,
-		Bucket:      b.Bucket,
-		PathStyle:   b.PathStyle,
-		KeyPrefix:   b.KeyPrefix,
-		MountPath:   b.MountPath,
-		IsEnabled:   b.IsEnabled,
-		IsReadonly:  b.IsReadonly,
-		CreatedAt:   b.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:   b.UpdatedAt.Format(time.RFC3339),
+		ID:        b.ID,
+		Name:      b.Name,
+		Endpoint:  b.Endpoint,
+		Region:    b.Region,
+		Bucket:    b.Bucket,
+		PathStyle: b.PathStyle,
+		KeyPrefix: b.KeyPrefix,
+		MountPath: b.MountPath,
+		IsPrimary: b.IsPrimary,
+		IsEnabled: b.IsEnabled,
+		IsReadonly: b.IsReadonly,
+		CreatedAt: b.CreatedAt.Format(time.RFC3339),
+		UpdatedAt: b.UpdatedAt.Format(time.RFC3339),
 	}
 }
 
 func (h *Handler) ListBackends(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	backends, err := h.db.S3Backend.Query().All(ctx)
+	backends, err := h.db.S3Backend.Query().
+		Order(ent.Asc(s3backend.FieldMountPath), ent.Desc(s3backend.FieldIsPrimary)).
+		All(ctx)
 	if err != nil {
 		http.Error(w, "failed to list backends", http.StatusInternalServerError)
 		return
@@ -189,6 +194,33 @@ func (h *Handler) ListBackends(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
+// ListMountPaths returns unique mount paths with their backends
+func (h *Handler) ListMountPaths(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	backends, err := h.db.S3Backend.Query().
+		Where(s3backend.IsEnabledEQ(true)).
+		Order(ent.Asc(s3backend.FieldMountPath), ent.Desc(s3backend.FieldIsPrimary)).
+		All(ctx)
+	if err != nil {
+		http.Error(w, "failed to list backends", http.StatusInternalServerError)
+		return
+	}
+
+	// Group by mount_path
+	groups := make(map[string][]map[string]interface{})
+	for _, b := range backends {
+		groups[b.MountPath] = append(groups[b.MountPath], map[string]interface{}{
+			"id":        b.ID,
+			"name":      b.Name,
+			"is_primary": b.IsPrimary,
+			"bucket":    b.Bucket,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(groups)
+}
+
 type CreateBackendRequest struct {
 	Name         string `json:"name"`
 	Endpoint     string `json:"endpoint"`
@@ -200,6 +232,7 @@ type CreateBackendRequest struct {
 	PathStyle    bool   `json:"path_style"`
 	KeyPrefix    string `json:"key_prefix"`
 	MountPath    string `json:"mount_path"`
+	IsPrimary    bool   `json:"is_primary"`
 	IsEnabled    bool   `json:"is_enabled"`
 	IsReadonly   bool   `json:"is_readonly"`
 }
@@ -223,12 +256,13 @@ func (h *Handler) CreateBackend(w http.ResponseWriter, r *http.Request) {
 		SetPathStyle(req.PathStyle).
 		SetKeyPrefix(req.KeyPrefix).
 		SetMountPath(req.MountPath).
+		SetIsPrimary(req.IsPrimary).
 		SetIsEnabled(req.IsEnabled).
 		SetIsReadonly(req.IsReadonly).
 		Save(ctx)
 	if err != nil {
 		if ent.IsConstraintError(err) {
-			http.Error(w, "backend with this name or mount path already exists", http.StatusConflict)
+			http.Error(w, "backend with this name already exists", http.StatusConflict)
 			return
 		}
 		http.Error(w, "failed to create backend", http.StatusInternalServerError)
@@ -273,6 +307,7 @@ type UpdateBackendRequest struct {
 	PathStyle    *bool   `json:"path_style"`
 	KeyPrefix    *string `json:"key_prefix"`
 	MountPath    *string `json:"mount_path"`
+	IsPrimary    *bool   `json:"is_primary"`
 	IsEnabled    *bool   `json:"is_enabled"`
 	IsReadonly   *bool   `json:"is_readonly"`
 }
@@ -323,6 +358,9 @@ func (h *Handler) UpdateBackend(w http.ResponseWriter, r *http.Request) {
 	if req.MountPath != nil {
 		update = update.SetMountPath(*req.MountPath)
 	}
+	if req.IsPrimary != nil {
+		update = update.SetIsPrimary(*req.IsPrimary)
+	}
 	if req.IsEnabled != nil {
 		update = update.SetIsEnabled(*req.IsEnabled)
 	}
@@ -337,7 +375,7 @@ func (h *Handler) UpdateBackend(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if ent.IsConstraintError(err) {
-			http.Error(w, "backend with this name or mount path already exists", http.StatusConflict)
+			http.Error(w, "backend with this name already exists", http.StatusConflict)
 			return
 		}
 		http.Error(w, "failed to update backend", http.StatusInternalServerError)

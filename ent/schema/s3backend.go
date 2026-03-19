@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"entgo.io/ent"
-	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/edge"
+	"entgo.io/ent/schema/field"
 )
 
 // S3Backend holds the schema definition for the S3Backend entity.
@@ -48,9 +48,11 @@ func (S3Backend) Fields() []ent.Field {
 			Optional().
 			Comment("Optional prefix for all keys in this backend"),
 		field.String("mount_path").
-			Unique().
 			NotEmpty().
-			Comment("Virtual path to mount this backend (e.g., /minio)"),
+			Comment("Virtual path to mount (e.g., /backup). Multiple backends with same path = replication"),
+		field.Bool("is_primary").
+			Default(false).
+			Comment("Primary backend for reading when multiple backends share same mount_path"),
 		field.Bool("is_enabled").
 			Default(true).
 			Comment("Whether this backend is active"),

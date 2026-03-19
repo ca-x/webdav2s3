@@ -76,6 +76,7 @@ func SetupRouter(db *ent.Client, pool *s3client.Pool, jwtSecret string) (*chi.Mu
 		r.Group(func(r chi.Router) {
 			r.Use(apiHandler.JWTMiddleware)
 			r.Get("/backends", apiHandler.ListBackends)
+			r.Get("/mount-paths", apiHandler.ListMountPaths)
 			r.Post("/backends", apiHandler.CreateBackend)
 			r.Get("/backends/{id}", apiHandler.GetBackend)
 			r.Put("/backends/{id}", apiHandler.UpdateBackend)

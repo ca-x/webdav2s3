@@ -11,7 +11,13 @@
                 </div>
                 <div class="form-group">
                     <label for="mount_path">Mount Path *</label>
-                    <input type="text" id="mount_path" x-model="form.mount_path" required placeholder="/minio">
+                    <input type="text" id="mount_path" x-model="form.mount_path" required placeholder="/minio" list="existing_paths">
+                    <datalist id="existing_paths">
+                        <template x-for="path in existingPaths" :key="path">
+                            <option :value="path">
+                        </template>
+                    </datalist>
+                    <small style="color: #6b7280;">Enter existing path to add replication</small>
                 </div>
             </div>
 
@@ -52,10 +58,14 @@
                 <input type="text" id="key_prefix" x-model="form.key_prefix" placeholder="webdav/">
             </div>
 
-            <div style="display: flex; gap: 20px; margin-bottom: 20px;">
+            <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px;">
                 <label class="checkbox-label">
                     <input type="checkbox" x-model="form.path_style">
-                    Use Path-Style URLs (required for MinIO/R2)
+                    Use Path-Style URLs (MinIO/R2)
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" x-model="form.is_primary">
+                    Primary (for reads)
                 </label>
                 <label class="checkbox-label">
                     <input type="checkbox" x-model="form.is_enabled">
@@ -81,6 +91,7 @@
 function backendForm() {
     return {
         isEdit: false,
+        existingPaths: [],
         form: {
             name: '',
             mount_path: '',
@@ -92,16 +103,29 @@ function backendForm() {
             session_token: '',
             key_prefix: '',
             path_style: false,
+            is_primary: false,
             is_enabled: true,
             is_readonly: false
         },
         error: '',
         async init() {
+            await this.loadExistingPaths();
+
             const path = window.location.pathname;
             const match = path.match(/\/admin\/backends\/(\d+)$/);
             if (match) {
                 this.isEdit = true;
                 await this.loadBackend(parseInt(match[1]));
+            }
+        },
+        async loadExistingPaths() {
+            const token = localStorage.getItem('token');
+            const resp = await fetch('/api/v1/mount-paths', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                this.existingPaths = Object.keys(data);
             }
         },
         async loadBackend(id) {
@@ -113,14 +137,15 @@ function backendForm() {
             this.form = {
                 name: data.name,
                 mount_path: data.mount_path,
-                endpoint: data.endpoint,
+                endpoint: data.endpoint || '',
                 region: data.region,
                 bucket: data.bucket,
-                access_key: '', // Don't prefill sensitive fields
+                access_key: '',
                 secret_key: '',
                 session_token: '',
-                key_prefix: data.key_prefix,
+                key_prefix: data.key_prefix || '',
                 path_style: data.path_style,
+                is_primary: data.is_primary,
                 is_enabled: data.is_enabled,
                 is_readonly: data.is_readonly
             };
@@ -144,6 +169,7 @@ function backendForm() {
                 if (this.form.session_token) body.session_token = this.form.session_token;
                 if (this.form.key_prefix) body.key_prefix = this.form.key_prefix;
                 body.path_style = this.form.path_style;
+                body.is_primary = this.form.is_primary;
                 body.is_enabled = this.form.is_enabled;
                 body.is_readonly = this.form.is_readonly;
             } else {
@@ -168,15 +194,10 @@ function backendForm() {
         },
         async testConnection() {
             const token = localStorage.getItem('token');
-            let backend = { ...this.form };
-
-            // For editing, we need to temporarily save first or use a separate test endpoint
-            // For simplicity, we'll create a temporary backend ID if needed
             const path = window.location.pathname;
             const match = path.match(/\/admin\/backends\/(\d+)$/);
 
             if (match) {
-                // Existing backend - test it
                 const resp = await fetch('/api/v1/backends/' + match[1] + '/test', {
                     headers: { 'Authorization': 'Bearer ' + token }
                 });
@@ -187,7 +208,6 @@ function backendForm() {
                     alert('Connection failed: ' + result.error);
                 }
             } else {
-                // New backend - save first, then test
                 alert('Please save the backend first, then test the connection.');
             }
         }
