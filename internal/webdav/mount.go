@@ -3,8 +3,10 @@ package webdav
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -29,11 +31,11 @@ type MountFs struct {
 }
 
 type mountEntry struct {
-	id       int
-	fs       afero.Fs
-	isPrimary bool
+	id         int
+	fs         afero.Fs
+	isPrimary  bool
 	isReadonly bool
-	name     string
+	name       string
 }
 
 // NewMountFs creates a new mount filesystem.
@@ -79,6 +81,11 @@ func (m *MountFs) Mount(ctx context.Context, backend *ent.S3Backend) error {
 }
 
 func (m *MountFs) mountBackend(ctx context.Context, backend *ent.S3Backend) error {
+	mountPath, err := normalizeMountPath(backend.MountPath)
+	if err != nil {
+		return fmt.Errorf("invalid mount_path %q: %w", backend.MountPath, err)
+	}
+
 	client, err := m.pool.Get(ctx, backend)
 	if err != nil {
 		return err
@@ -90,21 +97,21 @@ func (m *MountFs) mountBackend(ctx context.Context, backend *ent.S3Backend) erro
 	}
 
 	entry := &mountEntry{
-		id:        backend.ID,
-		fs:        fs,
-		isPrimary: backend.IsPrimary,
+		id:         backend.ID,
+		fs:         fs,
+		isPrimary:  backend.IsPrimary,
 		isReadonly: backend.IsReadonly,
-		name:      backend.Name,
+		name:       backend.Name,
 	}
 
 	// Insert into correct position (primary first)
-	entries := m.mounts[backend.MountPath]
+	entries := m.mounts[mountPath]
 	if backend.IsPrimary {
 		entries = append([]*mountEntry{entry}, entries...)
 	} else {
 		entries = append(entries, entry)
 	}
-	m.mounts[backend.MountPath] = entries
+	m.mounts[mountPath] = entries
 
 	return nil
 }
@@ -133,12 +140,14 @@ func (m *MountFs) Resolve(requestPath string) ([]*mountEntry, string) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
+	requestPath = normalizeRequestPath(requestPath)
+
 	// Find longest matching mount path
 	var bestMatch string
 	var bestEntries []*mountEntry
 
 	for mountPath, entries := range m.mounts {
-		if strings.HasPrefix(requestPath, mountPath) {
+		if pathMatchesMount(requestPath, mountPath) {
 			if len(mountPath) > len(bestMatch) {
 				bestMatch = mountPath
 				bestEntries = entries
@@ -150,6 +159,8 @@ func (m *MountFs) Resolve(requestPath string) ([]*mountEntry, string) {
 		remainingPath := strings.TrimPrefix(requestPath, bestMatch)
 		if remainingPath == "" {
 			remainingPath = "/"
+		} else if !strings.HasPrefix(remainingPath, "/") {
+			remainingPath = "/" + remainingPath
 		}
 		return bestEntries, remainingPath
 	}
@@ -405,4 +416,40 @@ func (f *replicatingFile) Close() error {
 		otherFile.Close()
 	}
 	return f.File.Close()
+}
+
+func normalizeMountPath(mountPath string) (string, error) {
+	mountPath = strings.TrimSpace(mountPath)
+	if mountPath == "" {
+		return "", fmt.Errorf("mount_path is required")
+	}
+	if !strings.HasPrefix(mountPath, "/") {
+		mountPath = "/" + mountPath
+	}
+	mountPath = path.Clean(mountPath)
+	if mountPath == "." {
+		mountPath = "/"
+	}
+	return mountPath, nil
+}
+
+func normalizeRequestPath(requestPath string) string {
+	if requestPath == "" {
+		return "/"
+	}
+	cleanPath := path.Clean("/" + requestPath)
+	if cleanPath == "." {
+		return "/"
+	}
+	return cleanPath
+}
+
+func pathMatchesMount(requestPath, mountPath string) bool {
+	if mountPath == "/" {
+		return strings.HasPrefix(requestPath, "/")
+	}
+	if requestPath == mountPath {
+		return true
+	}
+	return strings.HasPrefix(requestPath, mountPath+"/")
 }

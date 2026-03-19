@@ -30,9 +30,9 @@ import (
 
 // Build-time variables (set via ldflags)
 var (
-	Version    = "dev"
-	BuildTime  = "unknown"
-	GitCommit  = "unknown"
+	Version   = "dev"
+	BuildTime = "unknown"
+	GitCommit = "unknown"
 )
 
 func main() {
@@ -92,8 +92,10 @@ func main() {
 
 func setupDatabaseMode(cfg *config.Config) (http.Handler, error) {
 	// Create database directory if needed
-	if err := os.MkdirAll(filepath.Dir(cfg.DatabasePath), 0o755); err != nil {
-		return nil, fmt.Errorf("create database directory: %w", err)
+	if cfg.DatabaseURL == "" && cfg.DatabasePath != "" {
+		if err := os.MkdirAll(filepath.Dir(cfg.DatabasePath), 0o755); err != nil {
+			return nil, fmt.Errorf("create database directory: %w", err)
+		}
 	}
 
 	// Open database
@@ -108,13 +110,23 @@ func setupDatabaseMode(cfg *config.Config) (http.Handler, error) {
 		return nil, fmt.Errorf("failed to create schema: %w", err)
 	}
 
-	log.Printf("Database initialized: %s", cfg.DatabasePath)
+	if cfg.DatabaseURL != "" {
+		log.Printf("Database initialized with DATABASE_URL")
+	} else {
+		log.Printf("Database initialized: %s", cfg.DatabasePath)
+	}
 
 	// Create S3 client pool
 	pool := s3client.NewPool()
 
 	// Setup router
-	router, err := server.SetupRouter(db, pool, cfg.JWTSecret)
+	securityCfg := server.SecurityConfig{
+		RateLimitPerMinute: cfg.RateLimitPerMinute,
+		MaxFileSizeBytes:   cfg.MaxFileSizeBytes,
+		AllowedExtensions:  cfg.AllowedExtensions,
+		ReadOnly:           cfg.ReadOnly,
+	}
+	router, err := server.SetupRouter(db, pool, cfg.JWTSecret, securityCfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup router: %w", err)
 	}
@@ -158,7 +170,13 @@ func setupLegacyMode(cfg *config.Config) (http.Handler, error) {
 	}
 
 	// Setup router
-	router := server.SetupLegacyRouter(authenticator, davHandler, cfg.RateLimitPerMinute)
+	securityCfg := server.SecurityConfig{
+		RateLimitPerMinute: cfg.RateLimitPerMinute,
+		MaxFileSizeBytes:   cfg.MaxFileSizeBytes,
+		AllowedExtensions:  cfg.AllowedExtensions,
+		ReadOnly:           cfg.ReadOnly,
+	}
+	router := server.SetupLegacyRouter(authenticator, davHandler, securityCfg)
 
 	return router, nil
 }

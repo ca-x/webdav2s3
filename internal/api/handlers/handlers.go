@@ -2,9 +2,13 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"path"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -14,21 +18,24 @@ import (
 	"github.com/example/webdav-s3/ent/s3backend"
 	"github.com/example/webdav-s3/ent/user"
 	"github.com/example/webdav-s3/internal/s3client"
+	davmount "github.com/example/webdav-s3/internal/webdav"
 	"github.com/example/webdav-s3/pkg/auth"
 )
 
 type Handler struct {
 	db       *ent.Client
 	pool     *s3client.Pool
+	mountFs  *davmount.MountFs
 	jwtAuth  *jwtauth.JWTAuth
 	tokenTTL time.Duration
 }
 
 // NewHandler creates a new API handler.
-func NewHandler(db *ent.Client, pool *s3client.Pool, jwtSecret string) *Handler {
+func NewHandler(db *ent.Client, pool *s3client.Pool, mountFs *davmount.MountFs, jwtSecret string) *Handler {
 	return &Handler{
 		db:       db,
 		pool:     pool,
+		mountFs:  mountFs,
 		jwtAuth:  jwtauth.New("HS256", []byte(jwtSecret), nil),
 		tokenTTL: 24 * time.Hour,
 	}
@@ -97,6 +104,15 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	http.SetCookie(w, &http.Cookie{
+		Name:     "jwt",
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Expires:  expiresAt,
+	})
+
 	resp := LoginResponse{
 		Token:     token,
 		ExpiresAt: expiresAt.Unix(),
@@ -137,41 +153,116 @@ func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
+type SetupStatusResponse struct {
+	Initialized bool `json:"initialized"`
+}
+
+type SetupInitRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+// GetSetupStatus returns whether at least one user exists.
+func (h *Handler) GetSetupStatus(w http.ResponseWriter, r *http.Request) {
+	initialized, err := h.db.User.Query().Exist(r.Context())
+	if err != nil {
+		http.Error(w, "failed to check setup status", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(SetupStatusResponse{Initialized: initialized})
+}
+
+// Initialize creates the first admin user when no users exist.
+func (h *Handler) Initialize(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	initialized, err := h.db.User.Query().Exist(ctx)
+	if err != nil {
+		http.Error(w, "failed to check setup status", http.StatusInternalServerError)
+		return
+	}
+	if initialized {
+		http.Error(w, "setup already completed", http.StatusConflict)
+		return
+	}
+
+	var req SetupInitRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	req.Username = strings.TrimSpace(req.Username)
+	if req.Username == "" {
+		http.Error(w, "username is required", http.StatusBadRequest)
+		return
+	}
+	if len(req.Password) < 8 {
+		http.Error(w, "password must be at least 8 characters", http.StatusBadRequest)
+		return
+	}
+
+	passwordHash, err := auth.HashPassword(req.Password)
+	if err != nil {
+		http.Error(w, "failed to hash password", http.StatusInternalServerError)
+		return
+	}
+
+	u, err := h.db.User.Create().
+		SetUsername(req.Username).
+		SetPasswordHash(passwordHash).
+		SetRole(user.RoleAdmin).
+		SetIsEnabled(true).
+		Save(ctx)
+	if err != nil {
+		if ent.IsConstraintError(err) {
+			http.Error(w, "username already exists", http.StatusConflict)
+			return
+		}
+		http.Error(w, "failed to create initial admin user", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(userToResponse(u))
+}
+
 // ─────────────────────────────────────────────
 // Backends
 // ─────────────────────────────────────────────
 
 type BackendResponse struct {
-	ID        int    `json:"id"`
-	Name      string `json:"name"`
-	Endpoint  string `json:"endpoint"`
-	Region    string `json:"region"`
-	Bucket    string `json:"bucket"`
-	PathStyle bool   `json:"path_style"`
-	KeyPrefix string `json:"key_prefix"`
-	MountPath string `json:"mount_path"`
-	IsPrimary bool   `json:"is_primary"`
-	IsEnabled bool   `json:"is_enabled"`
-	IsReadonly bool  `json:"is_readonly"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
+	ID         int    `json:"id"`
+	Name       string `json:"name"`
+	Endpoint   string `json:"endpoint"`
+	Region     string `json:"region"`
+	Bucket     string `json:"bucket"`
+	PathStyle  bool   `json:"path_style"`
+	KeyPrefix  string `json:"key_prefix"`
+	MountPath  string `json:"mount_path"`
+	IsPrimary  bool   `json:"is_primary"`
+	IsEnabled  bool   `json:"is_enabled"`
+	IsReadonly bool   `json:"is_readonly"`
+	CreatedAt  string `json:"created_at"`
+	UpdatedAt  string `json:"updated_at"`
 }
 
 func backendToResponse(b *ent.S3Backend) BackendResponse {
 	return BackendResponse{
-		ID:        b.ID,
-		Name:      b.Name,
-		Endpoint:  b.Endpoint,
-		Region:    b.Region,
-		Bucket:    b.Bucket,
-		PathStyle: b.PathStyle,
-		KeyPrefix: b.KeyPrefix,
-		MountPath: b.MountPath,
-		IsPrimary: b.IsPrimary,
-		IsEnabled: b.IsEnabled,
+		ID:         b.ID,
+		Name:       b.Name,
+		Endpoint:   b.Endpoint,
+		Region:     b.Region,
+		Bucket:     b.Bucket,
+		PathStyle:  b.PathStyle,
+		KeyPrefix:  b.KeyPrefix,
+		MountPath:  b.MountPath,
+		IsPrimary:  b.IsPrimary,
+		IsEnabled:  b.IsEnabled,
 		IsReadonly: b.IsReadonly,
-		CreatedAt: b.CreatedAt.Format(time.RFC3339),
-		UpdatedAt: b.UpdatedAt.Format(time.RFC3339),
+		CreatedAt:  b.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:  b.UpdatedAt.Format(time.RFC3339),
 	}
 }
 
@@ -210,10 +301,10 @@ func (h *Handler) ListMountPaths(w http.ResponseWriter, r *http.Request) {
 	groups := make(map[string][]map[string]interface{})
 	for _, b := range backends {
 		groups[b.MountPath] = append(groups[b.MountPath], map[string]interface{}{
-			"id":        b.ID,
-			"name":      b.Name,
+			"id":         b.ID,
+			"name":       b.Name,
 			"is_primary": b.IsPrimary,
-			"bucket":    b.Bucket,
+			"bucket":     b.Bucket,
 		})
 	}
 
@@ -243,6 +334,11 @@ func (h *Handler) CreateBackend(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
+	mountPath, err := normalizeMountPath(req.MountPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	ctx := r.Context()
 	b, err := h.db.S3Backend.Create().
@@ -255,7 +351,7 @@ func (h *Handler) CreateBackend(w http.ResponseWriter, r *http.Request) {
 		SetSessionToken(req.SessionToken).
 		SetPathStyle(req.PathStyle).
 		SetKeyPrefix(req.KeyPrefix).
-		SetMountPath(req.MountPath).
+		SetMountPath(mountPath).
 		SetIsPrimary(req.IsPrimary).
 		SetIsEnabled(req.IsEnabled).
 		SetIsReadonly(req.IsReadonly).
@@ -266,6 +362,10 @@ func (h *Handler) CreateBackend(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		http.Error(w, "failed to create backend", http.StatusInternalServerError)
+		return
+	}
+	if err := h.reloadMounts(ctx); err != nil {
+		http.Error(w, "backend created but mount refresh failed", http.StatusInternalServerError)
 		return
 	}
 
@@ -356,7 +456,12 @@ func (h *Handler) UpdateBackend(w http.ResponseWriter, r *http.Request) {
 		update = update.SetKeyPrefix(*req.KeyPrefix)
 	}
 	if req.MountPath != nil {
-		update = update.SetMountPath(*req.MountPath)
+		mountPath, err := normalizeMountPath(*req.MountPath)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		update = update.SetMountPath(mountPath)
 	}
 	if req.IsPrimary != nil {
 		update = update.SetIsPrimary(*req.IsPrimary)
@@ -384,6 +489,10 @@ func (h *Handler) UpdateBackend(w http.ResponseWriter, r *http.Request) {
 
 	// Invalidate cached client
 	h.pool.Remove(id)
+	if err := h.reloadMounts(ctx); err != nil {
+		http.Error(w, "backend updated but mount refresh failed", http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(backendToResponse(b))
@@ -408,6 +517,10 @@ func (h *Handler) DeleteBackend(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.pool.Remove(id)
+	if err := h.reloadMounts(ctx); err != nil {
+		http.Error(w, "backend deleted but mount refresh failed", http.StatusInternalServerError)
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -627,4 +740,26 @@ func (h *Handler) AdminOnly(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (h *Handler) reloadMounts(ctx context.Context) error {
+	if h.mountFs == nil {
+		return nil
+	}
+	return h.mountFs.LoadBackends(ctx)
+}
+
+func normalizeMountPath(mountPath string) (string, error) {
+	mountPath = strings.TrimSpace(mountPath)
+	if mountPath == "" {
+		return "", fmt.Errorf("mount_path is required")
+	}
+	if !strings.HasPrefix(mountPath, "/") {
+		mountPath = "/" + mountPath
+	}
+	mountPath = path.Clean(mountPath)
+	if mountPath == "." {
+		mountPath = "/"
+	}
+	return mountPath, nil
 }

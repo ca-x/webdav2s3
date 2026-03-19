@@ -2,11 +2,12 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
 	"github.com/example/webdav-s3/ent"
 	"github.com/example/webdav-s3/internal/api/handlers"
@@ -14,18 +15,27 @@ import (
 	"github.com/example/webdav-s3/internal/web"
 	davmount "github.com/example/webdav-s3/internal/webdav"
 	"github.com/example/webdav-s3/pkg/auth"
+	appmiddleware "github.com/example/webdav-s3/pkg/middleware"
 	davadapter "github.com/example/webdav-s3/pkg/webdav"
 	xwebdav "golang.org/x/net/webdav"
 )
 
+// SecurityConfig controls runtime security middleware settings.
+type SecurityConfig struct {
+	RateLimitPerMinute int
+	MaxFileSizeBytes   int64
+	AllowedExtensions  []string
+	ReadOnly           bool
+}
+
 // SetupRouter creates the main HTTP router.
-func SetupRouter(db *ent.Client, pool *s3client.Pool, jwtSecret string) (*chi.Mux, error) {
+func SetupRouter(db *ent.Client, pool *s3client.Pool, jwtSecret string, securityCfg SecurityConfig) (*chi.Mux, error) {
 	r := chi.NewRouter()
 
 	// Global middleware
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
-	r.Use(middleware.CleanPath)
+	r.Use(chimiddleware.Logger)
+	r.Use(chimiddleware.Recoverer)
+	r.Use(chimiddleware.CleanPath)
 
 	// Web UI handler
 	webHandler, err := web.NewHandler()
@@ -33,21 +43,21 @@ func SetupRouter(db *ent.Client, pool *s3client.Pool, jwtSecret string) (*chi.Mu
 		return nil, err
 	}
 
-	// API handler
-	apiHandler := handlers.NewHandler(db, pool, jwtSecret)
-
 	// Mount filesystem for multi-backend
 	mountFs := davmount.NewMountFs(db, pool)
 
+	// API handler
+	apiHandler := handlers.NewHandler(db, pool, mountFs, jwtSecret)
+
 	// Load backends from database
-	if err := mountFs.LoadBackends(nil); err != nil {
+	if err := mountFs.LoadBackends(context.Background()); err != nil {
 		// Log but don't fail - backends can be added later
 	}
 
 	// ── Health check ───────────────────────────────────────────────────────
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		_, _ = w.Write([]byte("OK"))
 	})
 
 	// ── Web UI routes ───────────────────────────────────────────────────────
@@ -55,19 +65,56 @@ func SetupRouter(db *ent.Client, pool *s3client.Pool, jwtSecret string) (*chi.Mu
 		http.Redirect(w, r, "/admin/", http.StatusFound)
 	})
 
-	r.Get("/admin/login", webHandler.LoginPage)
+	r.Get("/admin/login", func(w http.ResponseWriter, r *http.Request) {
+		hasUsers, err := hasInitializedUsers(r.Context(), db)
+		if err != nil {
+			http.Error(w, "failed to check setup status", http.StatusInternalServerError)
+			return
+		}
+		if !hasUsers {
+			http.Redirect(w, r, "/admin/setup", http.StatusFound)
+			return
+		}
+		webHandler.LoginPage(w, r)
+	})
+	r.Get("/admin/setup", func(w http.ResponseWriter, r *http.Request) {
+		hasUsers, err := hasInitializedUsers(r.Context(), db)
+		if err != nil {
+			http.Error(w, "failed to check setup status", http.StatusInternalServerError)
+			return
+		}
+		if hasUsers {
+			http.Redirect(w, r, "/admin/login", http.StatusFound)
+			return
+		}
+		webHandler.SetupPage(w, r)
+	})
+	r.Get("/admin/logout", func(w http.ResponseWriter, r *http.Request) {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "jwt",
+			Value:    "",
+			Path:     "/",
+			HttpOnly: true,
+			MaxAge:   -1,
+		})
+		http.Redirect(w, r, "/admin/login", http.StatusFound)
+	})
 
 	r.Route("/admin", func(r chi.Router) {
-		r.Use(web.AuthMiddleware)
+		r.Use(web.AuthMiddleware(jwtSecret))
 		r.Get("/", webHandler.Dashboard)
 		r.Get("/backends", webHandler.BackendList)
 		r.Get("/backends/new", webHandler.BackendForm)
 		r.Get("/backends/{id}", webHandler.BackendForm)
-		r.Get("/users", webHandler.UserList)
+		r.With(web.AdminOnlyMiddleware).Get("/users", webHandler.UserList)
 	})
 
 	// ── API routes ──────────────────────────────────────────────────────────
 	r.Route("/api/v1", func(r chi.Router) {
+		// Setup (no auth, first user only)
+		r.Get("/setup/status", apiHandler.GetSetupStatus)
+		r.Post("/setup/init", apiHandler.Initialize)
+
 		// Auth
 		r.Post("/auth/login", apiHandler.Login)
 		r.With(apiHandler.JWTMiddleware).Get("/auth/me", apiHandler.GetMe)
@@ -102,7 +149,7 @@ func SetupRouter(db *ent.Client, pool *s3client.Pool, jwtSecret string) (*chi.Mu
 		LockSystem: xwebdav.NewMemLS(),
 	}
 
-	r.HandleFunc("/mounts/*", func(w http.ResponseWriter, r *http.Request) {
+	var mountHandler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Authenticate with database users
 		username, password, ok := r.BasicAuth()
 		if !ok {
@@ -127,28 +174,42 @@ func SetupRouter(db *ent.Client, pool *s3client.Pool, jwtSecret string) (*chi.Mu
 		}
 		davHandler.ServeHTTP(w, r)
 	})
+	mountHandler = appmiddleware.PathTraversalProtection(mountHandler)
+	mountHandler = appmiddleware.MaxFileSize(securityCfg.MaxFileSizeBytes, mountHandler)
+	mountHandler = appmiddleware.AllowedExtensions(securityCfg.AllowedExtensions, mountHandler)
+	if securityCfg.ReadOnly {
+		mountHandler = appmiddleware.ReadOnly(mountHandler)
+	}
+	mountHandler = appmiddleware.RateLimit(securityCfg.RateLimitPerMinute, mountHandler)
+	mountHandler = appmiddleware.SecurityHeaders(mountHandler)
+	r.Handle("/mounts/*", mountHandler)
 
 	return r, nil
 }
 
 // SetupLegacyRouter creates a router for legacy single-backend mode.
-func SetupLegacyRouter(authenticator auth.Authenticator, fs *xwebdav.Handler, rateLimit int) *chi.Mux {
+func SetupLegacyRouter(authenticator auth.Authenticator, fs *xwebdav.Handler, securityCfg SecurityConfig) *chi.Mux {
 	r := chi.NewRouter()
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
+	r.Use(chimiddleware.Logger)
+	r.Use(chimiddleware.Recoverer)
 
 	// Health check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		_, _ = w.Write([]byte("OK"))
 	})
 
 	// WebDAV with basic auth
-	r.HandleFunc("/*", func(w http.ResponseWriter, r *http.Request) {
-		// Wrap with auth and security middleware
-		handler := authMiddleware(authenticator, fs)
-		handler.ServeHTTP(w, r)
-	})
+	handler := authMiddleware(authenticator, fs)
+	handler = appmiddleware.PathTraversalProtection(handler)
+	handler = appmiddleware.MaxFileSize(securityCfg.MaxFileSizeBytes, handler)
+	handler = appmiddleware.AllowedExtensions(securityCfg.AllowedExtensions, handler)
+	if securityCfg.ReadOnly {
+		handler = appmiddleware.ReadOnly(handler)
+	}
+	handler = appmiddleware.RateLimit(securityCfg.RateLimitPerMinute, handler)
+	handler = appmiddleware.SecurityHeaders(handler)
+	r.Handle("/*", handler)
 
 	return r
 }
@@ -169,4 +230,8 @@ func authMiddleware(authenticator auth.Authenticator, next http.Handler) http.Ha
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func hasInitializedUsers(ctx context.Context, db *ent.Client) (bool, error) {
+	return db.User.Query().Exist(ctx)
 }

@@ -100,11 +100,20 @@ var globalLimiter *ipLimiter
 
 // RateLimit enforces a per-IP rate limit (requests per minute).
 func RateLimit(requestsPerMinute int, next http.Handler) http.Handler {
+	if requestsPerMinute <= 0 {
+		return next
+	}
+
+	burst := requestsPerMinute / 10
+	if burst < 1 {
+		burst = 1
+	}
+
 	rps := rate.Limit(float64(requestsPerMinute) / 60.0)
 	globalLimiter = &ipLimiter{
 		limiters: make(map[string]*rate.Limiter),
 		rps:      rps,
-		burst:    requestsPerMinute / 10,
+		burst:    burst,
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ip := clientIP(r)

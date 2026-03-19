@@ -54,7 +54,7 @@
                 <a href="/admin/">Dashboard</a>
                 <a href="/admin/backends">Backends</a>
                 {{if eq .UserRole "admin"}}<a href="/admin/users">Users</a>{{end}}
-                <a href="/admin/logout" class="btn btn-secondary" style="margin-left: 20px;">Logout</a>
+                <a href="/admin/logout" class="btn btn-secondary" style="margin-left: 20px;" onclick="handleLogout(event)">Logout</a>
             </div>
         </div>
     </nav>
@@ -62,6 +62,14 @@
     <main>
         {{template "content" .}}
     </main>
+    <script>
+    function handleLogout(event) {
+        event.preventDefault();
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/admin/logout';
+    }
+    </script>
 </body>
 </html>
 {{end}}

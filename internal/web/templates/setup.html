@@ -1,0 +1,81 @@
+{{define "setup_content"}}
+<div class="login-container">
+    <div class="card login-card">
+        <h2 style="text-align: center; margin-bottom: 8px;">Initial Setup</h2>
+        <p style="text-align: center; color: #6b7280; margin-bottom: 20px;">Create the first administrator account</p>
+        <form id="setup-form">
+            <div class="form-group">
+                <label for="username">Admin Username</label>
+                <input type="text" id="username" name="username" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required minlength="8">
+            </div>
+            <div class="form-group">
+                <label for="confirm_password">Confirm Password</label>
+                <input type="password" id="confirm_password" name="confirm_password" required minlength="8">
+            </div>
+            <p class="error" style="display:none;"></p>
+            <button type="submit" class="btn btn-primary" style="width: 100%;">Create Admin</button>
+        </form>
+    </div>
+</div>
+<script>
+async function parseErrorMessage(resp, fallback) {
+    const text = await resp.text();
+    if (!text) return fallback;
+    try {
+        const obj = JSON.parse(text);
+        return obj.error || fallback;
+    } catch (_) {
+        return text;
+    }
+}
+
+async function ensureSetupNeeded() {
+    const resp = await fetch('/api/v1/setup/status');
+    if (!resp.ok) return;
+    const status = await resp.json();
+    if (status.initialized) {
+        window.location.href = '/admin/login';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    ensureSetupNeeded();
+});
+
+document.querySelector('#setup-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const form = this;
+    const errorEl = form.querySelector('.error');
+    errorEl.style.display = 'none';
+    errorEl.textContent = '';
+
+    const username = form.username.value.trim();
+    const password = form.password.value;
+    const confirmPassword = form.confirm_password.value;
+
+    if (password !== confirmPassword) {
+        errorEl.textContent = 'Passwords do not match';
+        errorEl.style.display = 'block';
+        return;
+    }
+
+    const resp = await fetch('/api/v1/setup/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+    });
+
+    if (resp.ok) {
+        window.location.href = '/admin/login';
+        return;
+    }
+
+    errorEl.textContent = await parseErrorMessage(resp, 'Setup failed');
+    errorEl.style.display = 'block';
+});
+</script>
+{{end}}

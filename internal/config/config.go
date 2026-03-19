@@ -14,6 +14,7 @@ type Config struct {
 	Port int
 
 	// Database (optional - for multi-backend mode)
+	DatabaseURL  string // Full SQLite DSN, takes precedence over DatabasePath
 	DatabasePath string // Path to database file
 
 	// JWT settings for API auth
@@ -57,6 +58,7 @@ func Load() (*Config, error) {
 
 	c := &Config{
 		Port:               envInt("PORT", 8080),
+		DatabaseURL:        envStr("DATABASE_URL", ""),
 		DatabasePath:       envStr("DATABASE_PATH", ""),
 		JWTSecret:          envStr("JWT_SECRET", ""),
 		S3Bucket:           os.Getenv("S3_BUCKET"),
@@ -87,7 +89,7 @@ func Load() (*Config, error) {
 	}
 
 	// Set default database path if in database mode but no path specified
-	if c.IsDatabaseMode() && c.DatabasePath == "" {
+	if c.IsDatabaseMode() && c.DatabaseURL == "" && c.DatabasePath == "" {
 		c.DatabasePath = defaultDBPath
 	}
 
@@ -99,11 +101,14 @@ func Load() (*Config, error) {
 
 // IsDatabaseMode returns true if database mode is enabled.
 func (c *Config) IsDatabaseMode() bool {
-	return c.DatabasePath != "" || c.JWTSecret != ""
+	return c.DatabaseURL != "" || c.DatabasePath != "" || c.JWTSecret != ""
 }
 
 // DatabaseConnectionString returns the SQLite connection string.
 func (c *Config) DatabaseConnectionString() string {
+	if c.DatabaseURL != "" {
+		return c.DatabaseURL
+	}
 	if c.DatabasePath == "" {
 		return ""
 	}
