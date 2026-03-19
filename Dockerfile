@@ -5,12 +5,11 @@ ARG ALPINE_VERSION=3.21
 # ── Stage 1: Build ───────────────────────────────────────────────────────────
 FROM golang:${GOLANG_VERSION}-alpine AS builder
 
-# Build args from GitHub Actions
 ARG VERSION=dev
 ARG BUILDTIME
 ARG GITCOMMIT
 
-RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev
+RUN apk add --no-cache git ca-certificates tzdata
 
 WORKDIR /build
 
@@ -18,11 +17,14 @@ WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Build with CGO for SQLite
+# Build without CGO (pure Go SQLite driver)
 COPY . .
-RUN CGO_ENABLED=1 GOOS=linux go build \
+RUN CGO_ENABLED=0 GOOS=linux go build \
+      -trimpath \
       -ldflags="-s -w \
-        -extldflags '-static'" \
+        -X 'main.Version=${VERSION}' \
+        -X 'main.BuildTime=${BUILDTIME}' \
+        -X 'main.GitCommit=${GITCOMMIT}'" \
       -o /out/webdav2s3 \
       ./cmd/server
 

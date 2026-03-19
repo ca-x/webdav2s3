@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/lib-x/entsqlite"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -26,6 +26,13 @@ import (
 	"github.com/example/webdav-s3/pkg/auth"
 	s3fs "github.com/example/webdav-s3/pkg/s3fs"
 	davadapter "github.com/example/webdav-s3/pkg/webdav"
+)
+
+// Build-time variables (set via ldflags)
+var (
+	Version    = "dev"
+	BuildTime  = "unknown"
+	GitCommit  = "unknown"
 )
 
 func main() {
