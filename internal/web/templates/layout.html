@@ -1,0 +1,67 @@
+{{define "layout"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebDAV2S3 - Admin</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        nav { background: #1e293b; color: white; padding: 16px 0; }
+        nav .container { display: flex; justify-content: space-between; align-items: center; }
+        nav a { color: white; text-decoration: none; margin-left: 20px; }
+        nav a:hover { text-decoration: underline; }
+        .logo { font-size: 1.25rem; font-weight: bold; }
+        .card { background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 24px; margin-bottom: 20px; }
+        .card h2 { margin-bottom: 16px; color: #1e293b; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 12px; border-bottom: 1px solid #e5e7eb; }
+        th { background: #f9fafb; font-weight: 600; color: #4b5563; }
+        .btn { display: inline-block; padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 14px; text-decoration: none; }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-danger:hover { background: #dc2626; }
+        .btn-secondary { background: #6b7280; color: white; }
+        .btn-secondary:hover { background: #4b5563; }
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; margin-bottom: 4px; font-weight: 500; color: #374151; }
+        .form-group input, .form-group select { width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
+        .form-group input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+        .checkbox-label { display: flex; align-items: center; gap: 8px; }
+        .checkbox-label input { width: auto; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 12px; font-weight: 500; }
+        .badge-green { background: #dcfce7; color: #166534; }
+        .badge-red { background: #fee2e2; color: #991b1b; }
+        .badge-blue { background: #dbeafe; color: #1e40af; }
+        .actions { display: flex; gap: 8px; }
+        .login-container { display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .login-card { width: 100%; max-width: 400px; }
+        .error { color: #dc2626; margin-bottom: 16px; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body {{if .LoggedIn}}x-data="{ navOpen: false}"{{end}}>
+    {{if .LoggedIn}}
+    <nav>
+        <div class="container">
+            <div class="logo">WebDAV2S3</div>
+            <div>
+                <a href="/admin/">Dashboard</a>
+                <a href="/admin/backends">Backends</a>
+                {{if eq .UserRole "admin"}}<a href="/admin/users">Users</a>{{end}}
+                <a href="/admin/logout" class="btn btn-secondary" style="margin-left: 20px;">Logout</a>
+            </div>
+        </div>
+    </nav>
+    {{end}}
+    <main>
+        {{template "content" .}}
+    </main>
+</body>
+</html>
+{{end}}

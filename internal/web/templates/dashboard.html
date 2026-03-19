@@ -1,0 +1,62 @@
+{{define "content"}}
+<div class="container" x-data="dashboard()">
+    <h1 style="margin-bottom: 24px;">Dashboard</h1>
+
+    <div class="card">
+        <h2>Backend Status</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Mount Path</th>
+                    <th>Bucket</th>
+                    <th>Status</th>
+                    <th>Read Only</th>
+                </tr>
+            </thead>
+            <tbody>
+                <template x-for="b in backends" :key="b.id">
+                    <tr>
+                        <td x-text="b.name"></td>
+                        <td x-text="b.mount_path"></td>
+                        <td x-text="b.bucket"></td>
+                        <td>
+                            <span class="badge" :class="b.is_enabled ? 'badge-green' : 'badge-red'" x-text="b.is_enabled ? 'Active' : 'Disabled'"></span>
+                        </td>
+                        <td>
+                            <span class="badge" :class="b.is_readonly ? 'badge-blue' : 'badge-green'" x-text="b.is_readonly ? 'Read Only' : 'Read/Write'"></span>
+                        </td>
+                    </tr>
+                </template>
+            </tbody>
+        </table>
+        <p x-show="backends.length === 0" style="padding: 20px; text-align: center; color: #6b7280;">No backends configured. <a href="/admin/backends/new">Add one</a>.</p>
+    </div>
+
+    <div class="card">
+        <h2>Quick Actions</h2>
+        <div style="display: flex; gap: 12px;">
+            <a href="/admin/backends" class="btn btn-primary">Manage Backends</a>
+            <a href="/admin/backends/new" class="btn btn-secondary">Add Backend</a>
+        </div>
+    </div>
+</div>
+<script>
+function dashboard() {
+    return {
+        backends: [],
+        async init() {
+            const token = localStorage.getItem('token');
+            if (!token) { window.location.href = '/admin/login'; return; }
+            try {
+                const resp = await fetch('/api/v1/backends', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (resp.status === 401) { window.location.href = '/admin/login'; return; }
+                this.backends = await resp.json();
+            } catch (e) { console.error(e); }
+        }
+    }
+}
+</script>
+{{end}}

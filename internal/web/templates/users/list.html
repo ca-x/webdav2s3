@@ -1,0 +1,136 @@
+{{define "content"}}
+<div class="container" x-data="users()">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+        <h1>Users</h1>
+        <button class="btn btn-primary" @click="showModal = true; editingUser = null; userForm = {username: '', password: '', role: 'user'}">Add User</button>
+    </div>
+
+    <div class="card">
+        <table>
+            <thead>
+                <tr>
+                    <th>Username</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <template x-for="u in users" :key="u.id">
+                    <tr>
+                        <td x-text="u.username"></td>
+                        <td>
+                            <span class="badge" :class="u.role === 'admin' ? 'badge-blue' : 'badge-green'" x-text="u.role"></span>
+                        </td>
+                        <td>
+                            <span class="badge" :class="u.is_enabled ? 'badge-green' : 'badge-red'" x-text="u.is_enabled ? 'Active' : 'Disabled'"></span>
+                        </td>
+                        <td class="actions">
+                            <button class="btn btn-primary" @click="editUser(u)">Edit</button>
+                            <button class="btn btn-danger" @click="deleteUser(u.id, u.username)">Delete</button>
+                        </td>
+                    </tr>
+                </template>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Modal -->
+    <div x-show="showModal" style="position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;" @click.self="showModal = false">
+        <div class="card" style="width: 400px;" @click.stop>
+            <h2 x-text="editingUser ? 'Edit User' : 'Add User'"></h2>
+            <form @submit.prevent="saveUser">
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" x-model="userForm.username" required :disabled="editingUser">
+                </div>
+                <div class="form-group">
+                    <label>Password <span x-show="editingUser">(leave empty to keep current)</span></label>
+                    <input type="password" x-model="userForm.password" :required="!editingUser">
+                </div>
+                <div class="form-group">
+                    <label>Role</label>
+                    <select x-model="userForm.role">
+                        <option value="user">User</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                </div>
+                <div class="form-group" x-show="editingUser">
+                    <label class="checkbox-label">
+                        <input type="checkbox" x-model="userForm.is_enabled"> Enabled
+                    </label>
+                </div>
+                <div style="display: flex; gap: 12px;">
+                    <button type="submit" class="btn btn-primary">Save</button>
+                    <button type="button" class="btn btn-secondary" @click="showModal = false">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+function users() {
+    return {
+        users: [],
+        showModal: false,
+        editingUser: null,
+        userForm: { username: '', password: '', role: 'user', is_enabled: true },
+        async init() {
+            await this.load();
+        },
+        async load() {
+            const token = localStorage.getItem('token');
+            const resp = await fetch('/api/v1/users', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            this.users = await resp.json();
+        },
+        editUser(u) {
+            this.editingUser = u;
+            this.userForm = { username: u.username, password: '', role: u.role, is_enabled: u.is_enabled };
+            this.showModal = true;
+        },
+        async saveUser() {
+            const token = localStorage.getItem('token');
+            const body = {};
+            if (!this.editingUser) {
+                Object.assign(body, this.userForm);
+            } else {
+                if (this.userForm.password) body.password = this.userForm.password;
+                if (this.userForm.role) body.role = this.userForm.role;
+                body.is_enabled = this.userForm.is_enabled;
+            }
+
+            const url = this.editingUser ? '/api/v1/users/' + this.editingUser.id : '/api/v1/users';
+            const method = this.editingUser ? 'PUT' : 'POST';
+
+            const resp = await fetch(url, {
+                method,
+                headers: {
+                    'Authorization': 'Bearer ' + token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(body)
+            });
+
+            if (resp.ok) {
+                this.showModal = false;
+                await this.load();
+            } else {
+                const err = await resp.json();
+                alert(err.error || 'Failed to save user');
+            }
+        },
+        async deleteUser(id, username) {
+            if (!confirm('Delete user "' + username + '"?')) return;
+            const token = localStorage.getItem('token');
+            await fetch('/api/v1/users/' + id, {
+                method: 'DELETE',
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            await this.load();
+        }
+    }
+}
+</script>
+{{end}}

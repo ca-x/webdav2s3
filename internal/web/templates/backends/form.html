@@ -1,0 +1,197 @@
+{{define "content"}}
+<div class="container" x-data="backendForm()">
+    <h1 style="margin-bottom: 24px;" x-text="isEdit ? 'Edit Backend' : 'Add Backend'"></h1>
+
+    <div class="card">
+        <form @submit.prevent="save">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div class="form-group">
+                    <label for="name">Name *</label>
+                    <input type="text" id="name" x-model="form.name" required placeholder="My MinIO">
+                </div>
+                <div class="form-group">
+                    <label for="mount_path">Mount Path *</label>
+                    <input type="text" id="mount_path" x-model="form.mount_path" required placeholder="/minio">
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div class="form-group">
+                    <label for="endpoint">Endpoint (leave empty for AWS S3)</label>
+                    <input type="text" id="endpoint" x-model="form.endpoint" placeholder="http://localhost:9000">
+                </div>
+                <div class="form-group">
+                    <label for="region">Region</label>
+                    <input type="text" id="region" x-model="form.region" placeholder="us-east-1">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="bucket">Bucket *</label>
+                <input type="text" id="bucket" x-model="form.bucket" required placeholder="my-bucket">
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div class="form-group">
+                    <label for="access_key">Access Key *</label>
+                    <input type="text" id="access_key" x-model="form.access_key" required>
+                </div>
+                <div class="form-group">
+                    <label for="secret_key">Secret Key *</label>
+                    <input type="password" id="secret_key" x-model="form.secret_key" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="session_token">Session Token (optional)</label>
+                <input type="text" id="session_token" x-model="form.session_token">
+            </div>
+
+            <div class="form-group">
+                <label for="key_prefix">Key Prefix (optional)</label>
+                <input type="text" id="key_prefix" x-model="form.key_prefix" placeholder="webdav/">
+            </div>
+
+            <div style="display: flex; gap: 20px; margin-bottom: 20px;">
+                <label class="checkbox-label">
+                    <input type="checkbox" x-model="form.path_style">
+                    Use Path-Style URLs (required for MinIO/R2)
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" x-model="form.is_enabled">
+                    Enabled
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" x-model="form.is_readonly">
+                    Read Only
+                </label>
+            </div>
+
+            <p class="error" x-show="error" x-text="error"></p>
+
+            <div style="display: flex; gap: 12px;">
+                <button type="submit" class="btn btn-primary">Save</button>
+                <button type="button" class="btn btn-secondary" @click="testConnection">Test Connection</button>
+                <a href="/admin/backends" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+<script>
+function backendForm() {
+    return {
+        isEdit: false,
+        form: {
+            name: '',
+            mount_path: '',
+            endpoint: '',
+            region: 'us-east-1',
+            bucket: '',
+            access_key: '',
+            secret_key: '',
+            session_token: '',
+            key_prefix: '',
+            path_style: false,
+            is_enabled: true,
+            is_readonly: false
+        },
+        error: '',
+        async init() {
+            const path = window.location.pathname;
+            const match = path.match(/\/admin\/backends\/(\d+)$/);
+            if (match) {
+                this.isEdit = true;
+                await this.loadBackend(parseInt(match[1]));
+            }
+        },
+        async loadBackend(id) {
+            const token = localStorage.getItem('token');
+            const resp = await fetch('/api/v1/backends/' + id, {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            const data = await resp.json();
+            this.form = {
+                name: data.name,
+                mount_path: data.mount_path,
+                endpoint: data.endpoint,
+                region: data.region,
+                bucket: data.bucket,
+                access_key: '', // Don't prefill sensitive fields
+                secret_key: '',
+                session_token: '',
+                key_prefix: data.key_prefix,
+                path_style: data.path_style,
+                is_enabled: data.is_enabled,
+                is_readonly: data.is_readonly
+            };
+        },
+        async save() {
+            const token = localStorage.getItem('token');
+            const path = window.location.pathname;
+            const match = path.match(/\/admin\/backends\/(\d+)$/);
+            const url = match ? '/api/v1/backends/' + match[1] : '/api/v1/backends';
+            const method = match ? 'PUT' : 'POST';
+
+            const body = {};
+            if (this.isEdit) {
+                if (this.form.name) body.name = this.form.name;
+                if (this.form.mount_path) body.mount_path = this.form.mount_path;
+                if (this.form.endpoint) body.endpoint = this.form.endpoint;
+                if (this.form.region) body.region = this.form.region;
+                if (this.form.bucket) body.bucket = this.form.bucket;
+                if (this.form.access_key) body.access_key = this.form.access_key;
+                if (this.form.secret_key) body.secret_key = this.form.secret_key;
+                if (this.form.session_token) body.session_token = this.form.session_token;
+                if (this.form.key_prefix) body.key_prefix = this.form.key_prefix;
+                body.path_style = this.form.path_style;
+                body.is_enabled = this.form.is_enabled;
+                body.is_readonly = this.form.is_readonly;
+            } else {
+                Object.assign(body, this.form);
+            }
+
+            const resp = await fetch(url, {
+                method,
+                headers: {
+                    'Authorization': 'Bearer ' + token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(body)
+            });
+
+            if (resp.ok) {
+                window.location.href = '/admin/backends';
+            } else {
+                const err = await resp.json();
+                this.error = err.error || 'Failed to save backend';
+            }
+        },
+        async testConnection() {
+            const token = localStorage.getItem('token');
+            let backend = { ...this.form };
+
+            // For editing, we need to temporarily save first or use a separate test endpoint
+            // For simplicity, we'll create a temporary backend ID if needed
+            const path = window.location.pathname;
+            const match = path.match(/\/admin\/backends\/(\d+)$/);
+
+            if (match) {
+                // Existing backend - test it
+                const resp = await fetch('/api/v1/backends/' + match[1] + '/test', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const result = await resp.json();
+                if (result.success) {
+                    alert('Connection successful!');
+                } else {
+                    alert('Connection failed: ' + result.error);
+                }
+            } else {
+                // New backend - save first, then test
+                alert('Please save the backend first, then test the connection.');
+            }
+        }
+    }
+}
+</script>
+{{end}}

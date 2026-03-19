@@ -1,0 +1,70 @@
+# ── Database Mode (Multi-Backend with Web UI) ─────────────────────────────────
+services:
+  webdav:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - DATABASE_PATH=/app/data/webdav.db
+      - JWT_SECRET=your-jwt-secret-change-in-production
+    volumes:
+      - webdav-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  webdav-data:
+
+# ── Legacy Mode (Single Backend with MinIO) ──────────────────────────────────
+# Uncomment below and comment out above to use legacy mode
+#
+# services:
+#   minio:
+#     image: minio/minio
+#     command: server /data --console-address ":9001"
+#     ports:
+#       - "9000:9000"
+#       - "9001:9001"
+#     environment:
+#       MINIO_ROOT_USER: minioadmin
+#       MINIO_ROOT_PASSWORD: minioadmin
+#     volumes:
+#       - minio_data:/data
+#     healthcheck:
+#       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+#       interval: 5s
+#       timeout: 5s
+#       retries: 5
+#
+#   minio-init:
+#     image: minio/mc
+#     depends_on:
+#       minio:
+#         condition: service_healthy
+#     entrypoint: >
+#       /bin/sh -c "
+#         mc alias set local http://minio:9000 minioadmin minioadmin &&
+#         mc mb --ignore-existing local/webdav-bucket
+#       "
+#
+#   webdav:
+#     build: .
+#     ports:
+#       - "8080:8080"
+#     depends_on:
+#       minio-init:
+#         condition: service_completed_successfully
+#     environment:
+#       PORT: 8080
+#       S3_BUCKET: webdav-bucket
+#       S3_REGION: us-east-1
+#       S3_ENDPOINT: http://minio:9000
+#       S3_FORCE_PATH_STYLE: "true"
+#       S3_ACCESS_KEY: minioadmin
+#       S3_SECRET_KEY: minioadmin
+#       AUTH_MODE: local
+#       LOCAL_AUTH_USERNAME: admin
+#       LOCAL_AUTH_PASSWORD: changeme
+#
+# volumes:
+#   minio_data:

@@ -1,0 +1,83 @@
+{{define "content"}}
+<div class="container" x-data="backends()">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+        <h1>S3 Backends</h1>
+        <a href="/admin/backends/new" class="btn btn-primary">Add Backend</a>
+    </div>
+
+    <div class="card">
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Mount Path</th>
+                    <th>Endpoint</th>
+                    <th>Bucket</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <template x-for="b in backends" :key="b.id">
+                    <tr>
+                        <td x-text="b.name"></td>
+                        <td x-text="b.mount_path"></td>
+                        <td x-text="b.endpoint || 'AWS S3'"></td>
+                        <td x-text="b.bucket"></td>
+                        <td>
+                            <span class="badge" :class="b.is_enabled ? 'badge-green' : 'badge-red'" x-text="b.is_enabled ? 'Active' : 'Disabled'"></span>
+                        </td>
+                        <td class="actions">
+                            <button class="btn btn-secondary" @click="testBackend(b.id, b.name)">Test</button>
+                            <a :href="'/admin/backends/' + b.id" class="btn btn-primary">Edit</a>
+                            <button class="btn btn-danger" @click="deleteBackend(b.id, b.name)">Delete</button>
+                        </td>
+                    </tr>
+                </template>
+            </tbody>
+        </table>
+        <p x-show="backends.length === 0" style="padding: 20px; text-align: center; color: #6b7280;">No backends configured.</p>
+    </div>
+</div>
+<script>
+function backends() {
+    return {
+        backends: [],
+        async init() {
+            const token = localStorage.getItem('token');
+            if (!token) { window.location.href = '/admin/login'; return; }
+            await this.load();
+        },
+        async load() {
+            const token = localStorage.getItem('token');
+            const resp = await fetch('/api/v1/backends', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            if (resp.status === 401) { window.location.href = '/admin/login'; return; }
+            this.backends = await resp.json();
+        },
+        async testBackend(id, name) {
+            const token = localStorage.getItem('token');
+            const resp = await fetch('/api/v1/backends/' + id + '/test', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            const result = await resp.json();
+            if (result.success) {
+                alert('Connection to ' + name + ' successful!');
+            } else {
+                alert('Connection failed: ' + result.error);
+            }
+        },
+        async deleteBackend(id, name) {
+            if (!confirm('Delete backend "' + name + '"?')) return;
+            const token = localStorage.getItem('token');
+            await fetch('/api/v1/backends/' + id, {
+                method: 'DELETE',
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            await this.load();
+        }
+    }
+}
+</script>
+{{end}}
