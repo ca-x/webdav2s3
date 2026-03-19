@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/spf13/afero"
 	xwebdav "golang.org/x/net/webdav"
+	"gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/example/webdav-s3/ent"
 	"github.com/example/webdav-s3/internal/config"
@@ -44,6 +46,9 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("configuration error: %v", err)
+	}
+	if err := setupLogging(cfg); err != nil {
+		log.Fatalf("logging setup error: %v", err)
 	}
 
 	var handler http.Handler
@@ -88,6 +93,36 @@ func main() {
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
+}
+
+func setupLogging(cfg *config.Config) error {
+	if cfg.LogFilePath == "" {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(cfg.LogFilePath), 0o755); err != nil {
+		return fmt.Errorf("create log directory: %w", err)
+	}
+
+	rotatingLogger := &lumberjack.Logger{
+		Filename:   cfg.LogFilePath,
+		MaxSize:    cfg.LogMaxSizeMB,
+		MaxBackups: cfg.LogMaxBackups,
+		MaxAge:     cfg.LogMaxAgeDays,
+		Compress:   cfg.LogCompress,
+		LocalTime:  true,
+	}
+
+	outputs := []io.Writer{rotatingLogger}
+	if cfg.LogStdout {
+		outputs = append([]io.Writer{os.Stdout}, outputs...)
+	}
+
+	writer := io.MultiWriter(outputs...)
+	log.SetOutput(writer)
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+	server.SetHTTPLogger(log.New(writer, "", log.LstdFlags|log.Lmicroseconds))
+
+	return nil
 }
 
 func setupDatabaseMode(cfg *config.Config) (http.Handler, error) {

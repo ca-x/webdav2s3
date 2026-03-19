@@ -3,6 +3,7 @@ package server
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"strings"
 
@@ -234,4 +235,15 @@ func authMiddleware(authenticator auth.Authenticator, next http.Handler) http.Ha
 
 func hasInitializedUsers(ctx context.Context, db *ent.Client) (bool, error) {
 	return db.User.Query().Exist(ctx)
+}
+
+// SetHTTPLogger configures chi's default request logger output.
+func SetHTTPLogger(logger *log.Logger) {
+	if logger == nil {
+		return
+	}
+	chimiddleware.DefaultLogger = chimiddleware.RequestLogger(&chimiddleware.DefaultLogFormatter{
+		Logger:  logger,
+		NoColor: true,
+	})
 }

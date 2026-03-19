@@ -12,6 +12,13 @@ import (
 type Config struct {
 	// Server
 	Port int
+	// Logging
+	LogFilePath   string
+	LogStdout     bool
+	LogMaxSizeMB  int
+	LogMaxBackups int
+	LogMaxAgeDays int
+	LogCompress   bool
 
 	// Database (optional - for multi-backend mode)
 	DatabaseURL  string // Full SQLite DSN, takes precedence over DatabasePath
@@ -58,6 +65,12 @@ func Load() (*Config, error) {
 
 	c := &Config{
 		Port:               envInt("PORT", 8080),
+		LogFilePath:        envStr("LOG_FILE_PATH", ""),
+		LogStdout:          envBool("LOG_STDOUT", true),
+		LogMaxSizeMB:       envInt("LOG_MAX_SIZE_MB", 100),
+		LogMaxBackups:      envInt("LOG_MAX_BACKUPS", 7),
+		LogMaxAgeDays:      envInt("LOG_MAX_AGE_DAYS", 30),
+		LogCompress:        envBool("LOG_COMPRESS", true),
 		DatabaseURL:        envStr("DATABASE_URL", ""),
 		DatabasePath:       envStr("DATABASE_PATH", ""),
 		JWTSecret:          envStr("JWT_SECRET", ""),
@@ -116,6 +129,16 @@ func (c *Config) DatabaseConnectionString() string {
 }
 
 func (c *Config) validate() error {
+	if c.LogMaxSizeMB <= 0 {
+		return fmt.Errorf("LOG_MAX_SIZE_MB must be > 0")
+	}
+	if c.LogMaxBackups < 0 {
+		return fmt.Errorf("LOG_MAX_BACKUPS must be >= 0")
+	}
+	if c.LogMaxAgeDays < 0 {
+		return fmt.Errorf("LOG_MAX_AGE_DAYS must be >= 0")
+	}
+
 	// In database mode, only require JWT_SECRET
 	if c.IsDatabaseMode() {
 		if c.JWTSecret == "" {

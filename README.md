@@ -74,6 +74,17 @@ Set `DATABASE_URL` (or `DATABASE_PATH`) and `JWT_SECRET`.
 
 \* `DATABASE_URL` or `DATABASE_PATH`, at least one is required for database mode.
 
+### Logging Environment Variables
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `LOG_FILE_PATH` | | empty | Log file path for rotation (empty = stdout only) |
+| `LOG_STDOUT` | | `true` | Also write logs to stdout when file logging is enabled |
+| `LOG_MAX_SIZE_MB` | | `100` | Max size per log file before rotation |
+| `LOG_MAX_BACKUPS` | | `7` | Number of old log files to retain |
+| `LOG_MAX_AGE_DAYS` | | `30` | Max age (days) of old log files |
+| `LOG_COMPRESS` | | `true` | Compress rotated log files |
+
 ## Quick Start
 
 ### Database Mode (Multi-Backend)

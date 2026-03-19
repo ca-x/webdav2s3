@@ -80,6 +80,17 @@ DATABASE_PATH=./data.db JWT_SECRET=secret go run ./cmd/server
 
 \* `DATABASE_URL` 与 `DATABASE_PATH` 二选一即可。
 
+#### 日志轮转配置（Lumberjack）
+
+| 变量 | 必需 | 默认值 | 说明 |
+|------|------|--------|------|
+| `LOG_FILE_PATH` | | 空 | 日志文件路径（为空时仅输出到 stdout） |
+| `LOG_STDOUT` | | true | 开启文件日志时，是否同时输出到 stdout |
+| `LOG_MAX_SIZE_MB` | | 100 | 单个日志文件最大大小（MB） |
+| `LOG_MAX_BACKUPS` | | 7 | 保留历史日志文件数量 |
+| `LOG_MAX_AGE_DAYS` | | 30 | 历史日志最大保留天数 |
+| `LOG_COMPRESS` | | true | 是否压缩历史日志 |
+
 #### 传统模式（单后端）
 
 | 变量 | 必需 | 默认值 | 说明 |
