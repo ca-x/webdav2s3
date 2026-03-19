@@ -44,6 +44,8 @@ Set `DATABASE_URL` (or `DATABASE_PATH`) and `JWT_SECRET`.
 | `/mounts/*` | WebDAV (database mode) |
 | `/*` | WebDAV (legacy mode) |
 
+All HTTP responses include `X-Request-Id` for tracing.
+
 ## Configuration
 
 ### Legacy Mode Environment Variables

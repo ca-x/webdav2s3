@@ -121,6 +121,8 @@ DATABASE_PATH=./data.db JWT_SECRET=secret go run ./cmd/server
 | `/admin/backends/{id}` | 编辑后端 |
 | `/admin/users` | 用户管理（管理员） |
 
+所有 HTTP 响应都会带 `X-Request-Id`，便于问题排查与日志追踪。
+
 ### 首次使用
 
 1. 启动服务后访问 `http://localhost:8080/admin/`

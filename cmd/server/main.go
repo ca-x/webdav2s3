@@ -16,6 +16,7 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/joho/godotenv"
 	"github.com/spf13/afero"
 	xwebdav "golang.org/x/net/webdav"
@@ -188,7 +189,7 @@ func setupLegacyMode(cfg *config.Config) (http.Handler, error) {
 		LockSystem: xwebdav.NewMemLS(),
 		Logger: func(r *http.Request, err error) {
 			if err != nil {
-				log.Printf("WebDAV error: %s %s → %v", r.Method, r.URL.Path, err)
+				log.Printf("request_id=%s webdav error: %s %s -> %v", chimiddleware.GetReqID(r.Context()), r.Method, r.URL.Path, err)
 			}
 		},
 	}

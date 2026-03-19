@@ -34,6 +34,8 @@ func SetupRouter(db *ent.Client, pool *s3client.Pool, jwtSecret string, security
 	r := chi.NewRouter()
 
 	// Global middleware
+	r.Use(chimiddleware.RequestID)
+	r.Use(requestIDResponseHeader)
 	r.Use(chimiddleware.Logger)
 	r.Use(chimiddleware.Recoverer)
 	r.Use(chimiddleware.CleanPath)
@@ -148,12 +150,19 @@ func SetupRouter(db *ent.Client, pool *s3client.Pool, jwtSecret string, security
 	davHandler := &xwebdav.Handler{
 		FileSystem: davadapter.NewAferoFS(mountFs),
 		LockSystem: xwebdav.NewMemLS(),
+		Logger: func(r *http.Request, err error) {
+			if err == nil {
+				return
+			}
+			log.Printf("request_id=%s webdav error: %s %s -> %v", requestID(r), r.Method, r.URL.Path, err)
+		},
 	}
 
 	var mountHandler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Authenticate with database users
 		username, password, ok := r.BasicAuth()
 		if !ok {
+			log.Printf("request_id=%s unauthorized webdav request: missing basic auth", requestID(r))
 			w.Header().Set("WWW-Authenticate", `Basic realm="WebDAV"`)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
@@ -163,6 +172,7 @@ func SetupRouter(db *ent.Client, pool *s3client.Pool, jwtSecret string, security
 		dbAuth := auth.NewDatabase(db)
 		valid, err := dbAuth.Authenticate(username, password)
 		if err != nil || !valid {
+			log.Printf("request_id=%s unauthorized webdav request: invalid credentials user=%q err=%v", requestID(r), username, err)
 			w.Header().Set("WWW-Authenticate", `Basic realm="WebDAV"`)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
@@ -191,6 +201,8 @@ func SetupRouter(db *ent.Client, pool *s3client.Pool, jwtSecret string, security
 // SetupLegacyRouter creates a router for legacy single-backend mode.
 func SetupLegacyRouter(authenticator auth.Authenticator, fs *xwebdav.Handler, securityCfg SecurityConfig) *chi.Mux {
 	r := chi.NewRouter()
+	r.Use(chimiddleware.RequestID)
+	r.Use(requestIDResponseHeader)
 	r.Use(chimiddleware.Logger)
 	r.Use(chimiddleware.Recoverer)
 
@@ -219,12 +231,14 @@ func authMiddleware(authenticator auth.Authenticator, next http.Handler) http.Ha
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		username, password, ok := r.BasicAuth()
 		if !ok {
+			log.Printf("request_id=%s unauthorized legacy request: missing basic auth", requestID(r))
 			w.Header().Set("WWW-Authenticate", `Basic realm="WebDAV"`)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 		valid, err := authenticator.Authenticate(username, password)
 		if err != nil || !valid {
+			log.Printf("request_id=%s unauthorized legacy request: invalid credentials user=%q err=%v", requestID(r), username, err)
 			w.Header().Set("WWW-Authenticate", `Basic realm="WebDAV"`)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
@@ -246,4 +260,17 @@ func SetHTTPLogger(logger *log.Logger) {
 		Logger:  logger,
 		NoColor: true,
 	})
+}
+
+func requestIDResponseHeader(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if reqID := requestID(r); reqID != "" {
+			w.Header().Set(chimiddleware.RequestIDHeader, reqID)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func requestID(r *http.Request) string {
+	return chimiddleware.GetReqID(r.Context())
 }
