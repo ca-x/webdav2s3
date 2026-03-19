@@ -397,6 +397,12 @@ func (f *replicatingFile) Write(p []byte) (n int, err error) {
 }
 
 func (f *replicatingFile) Close() error {
+	if err := f.File.Close(); err != nil {
+		return err
+	}
+
+	var replicaErrors []string
+
 	// Replicate to other backends
 	for _, e := range f.entries {
 		if e.isReadonly {
@@ -405,17 +411,34 @@ func (f *replicatingFile) Close() error {
 		// Open and write the same content
 		otherFile, err := e.fs.OpenFile(f.path, f.flag, f.perm)
 		if err != nil {
+			replicaErrors = append(replicaErrors, fmt.Sprintf("%s(open): %v", e.name, err))
 			log.Printf("Failed to replicate to %s: %v", e.name, err)
 			continue
 		}
+
+		var replicaErr error
 		if len(f.buffer) > 0 {
 			if _, err := otherFile.Write(f.buffer); err != nil {
+				replicaErr = err
 				log.Printf("Failed to write replica to %s: %v", e.name, err)
 			}
 		}
-		otherFile.Close()
+
+		if closeErr := otherFile.Close(); closeErr != nil && replicaErr == nil {
+			replicaErr = closeErr
+			log.Printf("Failed to close replica file on %s: %v", e.name, closeErr)
+		}
+
+		if replicaErr != nil {
+			replicaErrors = append(replicaErrors, fmt.Sprintf("%s(write): %v", e.name, replicaErr))
+		}
 	}
-	return f.File.Close()
+
+	if len(replicaErrors) > 0 {
+		return fmt.Errorf("replication failed: %s", strings.Join(replicaErrors, "; "))
+	}
+
+	return nil
 }
 
 func normalizeMountPath(mountPath string) (string, error) {

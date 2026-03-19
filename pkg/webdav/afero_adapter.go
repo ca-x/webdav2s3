@@ -21,7 +21,7 @@ func NewAferoFS(fs afero.Fs) xwebdav.FileSystem {
 }
 
 func (a *AferoFS) Mkdir(ctx context.Context, name string, perm os.FileMode) error {
-	return a.fs.MkdirAll(name, perm)
+	return a.fs.Mkdir(path.Clean("/"+name), perm)
 }
 
 func (a *AferoFS) OpenFile(ctx context.Context, name string, flag int, perm os.FileMode) (xwebdav.File, error) {
@@ -50,11 +50,7 @@ func (a *AferoFS) RemoveAll(ctx context.Context, name string) error {
 }
 
 func (a *AferoFS) Rename(ctx context.Context, oldName, newName string) error {
-	// Ensure destination parent directory exists
-	if err := a.fs.MkdirAll(path.Dir(newName), 0755); err != nil {
-		return err
-	}
-	return a.fs.Rename(oldName, newName)
+	return a.fs.Rename(path.Clean("/"+oldName), path.Clean("/"+newName))
 }
 
 func (a *AferoFS) Stat(ctx context.Context, name string) (os.FileInfo, error) {

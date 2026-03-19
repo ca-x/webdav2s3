@@ -11,6 +11,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
+	"net/url"
 	"os"
 	"path"
 	"strings"
@@ -145,10 +147,63 @@ func (fs *S3Fs) Open(name string) (afero.File, error) {
 
 // OpenFile opens a file with the given flags.
 func (fs *S3Fs) OpenFile(name string, flag int, perm os.FileMode) (afero.File, error) {
-	if flag&os.O_WRONLY != 0 || flag&os.O_RDWR != 0 || flag&os.O_CREATE != 0 {
-		return fs.Create(name)
+	writeMode := flag&(os.O_WRONLY|os.O_RDWR|os.O_CREATE|os.O_APPEND|os.O_TRUNC) != 0
+	if !writeMode {
+		return fs.Open(name)
 	}
-	return fs.Open(name)
+
+	fi, statErr := fs.Stat(name)
+	exists := statErr == nil
+	if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+		return nil, statErr
+	}
+
+	if !exists && flag&os.O_CREATE == 0 {
+		return nil, &os.PathError{Op: "openfile", Path: name, Err: os.ErrNotExist}
+	}
+	if exists && flag&os.O_CREATE != 0 && flag&os.O_EXCL != 0 {
+		return nil, &os.PathError{Op: "openfile", Path: name, Err: os.ErrExist}
+	}
+	if exists && fi.IsDir() {
+		return nil, &os.PathError{Op: "openfile", Path: name, Err: os.ErrInvalid}
+	}
+
+	key := fs.s3Key(name)
+	if !exists {
+		if err := fs.MkdirAll(path.Dir(name), 0755); err != nil {
+			return nil, err
+		}
+	}
+
+	f := newS3File(fs, name, key, false)
+	if exists && flag&os.O_APPEND != 0 && flag&os.O_TRUNC == 0 {
+		if err := fs.loadFileToBuffer(name, f); err != nil {
+			return nil, err
+		}
+	}
+
+	return f, nil
+}
+
+func (fs *S3Fs) loadFileToBuffer(name string, f *s3File) error {
+	ctx := context.Background()
+	key := fs.s3Key(name)
+	out, err := fs.client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(fs.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return mapS3Error(err)
+	}
+	defer out.Body.Close()
+
+	data, err := io.ReadAll(out.Body)
+	if err != nil {
+		return err
+	}
+	f.buf.Reset()
+	_, _ = f.buf.Write(data)
+	return nil
 }
 
 // Remove deletes a file or empty directory.
@@ -228,13 +283,23 @@ func (fs *S3Fs) RemoveAll(path string) error {
 // Rename moves a file or directory.
 func (fs *S3Fs) Rename(oldname, newname string) error {
 	ctx := context.Background()
+	oldInfo, err := fs.Stat(oldname)
+	if err != nil {
+		return err
+	}
+
+	// Directory rename in S3 requires prefix-copy semantics.
+	if oldInfo.IsDir() {
+		return fs.renameDir(ctx, oldname, newname)
+	}
+
 	oldKey := fs.s3Key(oldname)
 	newKey := fs.s3Key(newname)
 
 	// Copy then delete
-	_, err := fs.client.CopyObject(ctx, &s3.CopyObjectInput{
+	_, err = fs.client.CopyObject(ctx, &s3.CopyObjectInput{
 		Bucket:     aws.String(fs.bucket),
-		CopySource: aws.String(fs.bucket + "/" + oldKey),
+		CopySource: aws.String(copySource(fs.bucket, oldKey)),
 		Key:        aws.String(newKey),
 	})
 	if err != nil {
@@ -245,6 +310,62 @@ func (fs *S3Fs) Rename(oldname, newname string) error {
 		Key:    aws.String(oldKey),
 	})
 	return mapS3Error(err)
+}
+
+func (fs *S3Fs) renameDir(ctx context.Context, oldname, newname string) error {
+	oldPrefix := fs.s3DirKey(oldname)
+	newPrefix := fs.s3DirKey(newname)
+	if oldPrefix == fs.keyPrefix {
+		return &os.PathError{Op: "rename", Path: oldname, Err: os.ErrInvalid}
+	}
+
+	var contToken *string
+	for {
+		resp, err := fs.client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+			Bucket:            aws.String(fs.bucket),
+			Prefix:            aws.String(oldPrefix),
+			ContinuationToken: contToken,
+		})
+		if err != nil {
+			return mapS3Error(err)
+		}
+
+		for _, obj := range resp.Contents {
+			if obj.Key == nil {
+				continue
+			}
+
+			oldObjectKey := *obj.Key
+			suffix := strings.TrimPrefix(oldObjectKey, oldPrefix)
+			newObjectKey := newPrefix + suffix
+
+			if _, err := fs.client.CopyObject(ctx, &s3.CopyObjectInput{
+				Bucket:     aws.String(fs.bucket),
+				CopySource: aws.String(copySource(fs.bucket, oldObjectKey)),
+				Key:        aws.String(newObjectKey),
+			}); err != nil {
+				return mapS3Error(err)
+			}
+		}
+
+		for _, obj := range resp.Contents {
+			if obj.Key == nil {
+				continue
+			}
+			if _, err := fs.client.DeleteObject(ctx, &s3.DeleteObjectInput{
+				Bucket: aws.String(fs.bucket),
+				Key:    obj.Key,
+			}); err != nil {
+				return mapS3Error(err)
+			}
+		}
+
+		if !*resp.IsTruncated {
+			break
+		}
+		contToken = resp.NextContinuationToken
+	}
+	return nil
 }
 
 // Stat returns file info.
@@ -311,8 +432,8 @@ func (fs *S3Fs) Stat(name string) (os.FileInfo, error) {
 }
 
 // Chmod / Chown / Chtimes are no-ops for S3.
-func (fs *S3Fs) Chmod(name string, mode os.FileMode) error   { return nil }
-func (fs *S3Fs) Chown(name string, uid, gid int) error       { return nil }
+func (fs *S3Fs) Chmod(name string, mode os.FileMode) error         { return nil }
+func (fs *S3Fs) Chown(name string, uid, gid int) error             { return nil }
 func (fs *S3Fs) Chtimes(name string, atime, mtime time.Time) error { return nil }
 
 // ─────────────────────────────────────────────
@@ -407,4 +528,9 @@ func mapS3Error(err error) error {
 		return os.ErrNotExist
 	}
 	return err
+}
+
+func copySource(bucket, key string) string {
+	escaped := url.PathEscape(bucket + "/" + key)
+	return strings.ReplaceAll(escaped, "%2F", "/")
 }
