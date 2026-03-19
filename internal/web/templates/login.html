@@ -17,6 +17,34 @@
     </div>
 </div>
 <script>
+async function parseErrorMessage(resp, fallback) {
+    const text = await resp.text();
+    if (!text) return fallback;
+    try {
+        const obj = JSON.parse(text);
+        return obj.error || fallback;
+    } catch (_) {
+        return text;
+    }
+}
+
+async function ensureInitialized() {
+    try {
+        const resp = await fetch('/api/v1/setup/status');
+        if (!resp.ok) return;
+        const status = await resp.json();
+        if (!status.initialized) {
+            window.location.href = '/admin/setup';
+        }
+    } catch (_) {
+        // no-op
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    ensureInitialized();
+});
+
 document.querySelector('form').addEventListener('submit', async function(e) {
     e.preventDefault();
     const form = this;
@@ -36,8 +64,7 @@ document.querySelector('form').addEventListener('submit', async function(e) {
             localStorage.setItem('user', JSON.stringify(result.user));
             window.location.href = '/admin/';
         } else {
-            const err = await resp.json();
-            form.querySelector('.error').textContent = err.error || 'Login failed';
+            form.querySelector('.error').textContent = await parseErrorMessage(resp, 'Login failed');
             form.querySelector('.error').style.display = 'block';
         }
     } catch (err) {

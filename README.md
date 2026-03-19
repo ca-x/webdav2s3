@@ -21,7 +21,7 @@ Set S3_* environment variables. No database required.
 - Auth: Local credentials or external API
 
 ### Database Mode (Multi-Backend)
-Set `DATABASE_URL` and `JWT_SECRET`.
+Set `DATABASE_URL` (or `DATABASE_PATH`) and `JWT_SECRET`.
 - Web UI: `/admin/*`
 - REST API: `/api/v1/*`
 - WebDAV: `/mounts/{mount_path}/*`
@@ -33,8 +33,11 @@ Set `DATABASE_URL` and `JWT_SECRET`.
 |------|-------------|
 | `/health` | Health check |
 | `/admin/` | Dashboard (database mode) |
+| `/admin/setup` | First-run setup wizard |
 | `/admin/backends` | Backend management |
 | `/admin/users` | User management (admin only) |
+| `/api/v1/setup/status` | Setup status |
+| `/api/v1/setup/init` | Initialize first admin user |
 | `/api/v1/auth/login` | JWT login |
 | `/api/v1/backends` | Backend CRUD API |
 | `/api/v1/users` | User CRUD API (admin) |
@@ -64,9 +67,12 @@ Set `DATABASE_URL` and `JWT_SECRET`.
 
 | Variable | Required | Description |
 |---|---|---|
-| `DATABASE_URL` | ✅ | SQLite connection string |
+| `DATABASE_URL` | ✅* | SQLite connection string (takes precedence) |
+| `DATABASE_PATH` | ✅* | SQLite file path |
 | `JWT_SECRET` | ✅ | JWT signing secret |
 | `PORT` | | Listen port (default 8080) |
+
+\* `DATABASE_URL` or `DATABASE_PATH`, at least one is required for database mode.
 
 ## Quick Start
 
@@ -81,7 +87,7 @@ export JWT_SECRET="your-secret-key"
 go run ./cmd/server
 
 # Open browser to http://localhost:8080/admin/
-# Login with admin credentials created on first run
+# On first start, complete setup at /admin/setup to create the first admin user
 ```
 
 ### Legacy Mode (Single Backend) with MinIO

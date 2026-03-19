@@ -63,9 +63,19 @@ type UserInfo struct {
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+	initialized, err := h.db.User.Query().Exist(r.Context())
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to check setup status")
+		return
+	}
+	if !initialized {
+		writeJSONError(w, http.StatusConflict, "service not initialized, visit /admin/setup first")
+		return
+	}
+
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "invalid request")
 		return
 	}
 
@@ -74,11 +84,11 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	valid, err := dbAuth.Authenticate(req.Username, req.Password)
 	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 	if !valid {
-		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+		writeJSONError(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
 
@@ -86,7 +96,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		Where(user.Username(req.Username)).
 		Only(ctx)
 	if err != nil {
-		http.Error(w, "user not found", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "user not found")
 		return
 	}
 
@@ -100,7 +110,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	_, token, err := h.jwtAuth.Encode(claims)
 	if err != nil {
-		http.Error(w, "token generation failed", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "token generation failed")
 		return
 	}
 
@@ -166,12 +176,12 @@ type SetupInitRequest struct {
 func (h *Handler) GetSetupStatus(w http.ResponseWriter, r *http.Request) {
 	initialized, err := h.db.User.Query().Exist(r.Context())
 	if err != nil {
-		http.Error(w, "failed to check setup status", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "failed to check setup status")
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(SetupStatusResponse{Initialized: initialized})
+	_ = json.NewEncoder(w).Encode(SetupStatusResponse{Initialized: initialized})
 }
 
 // Initialize creates the first admin user when no users exist.
@@ -179,32 +189,32 @@ func (h *Handler) Initialize(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	initialized, err := h.db.User.Query().Exist(ctx)
 	if err != nil {
-		http.Error(w, "failed to check setup status", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "failed to check setup status")
 		return
 	}
 	if initialized {
-		http.Error(w, "setup already completed", http.StatusConflict)
+		writeJSONError(w, http.StatusConflict, "setup already completed")
 		return
 	}
 
 	var req SetupInitRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "invalid request")
 		return
 	}
 	req.Username = strings.TrimSpace(req.Username)
 	if req.Username == "" {
-		http.Error(w, "username is required", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "username is required")
 		return
 	}
 	if len(req.Password) < 8 {
-		http.Error(w, "password must be at least 8 characters", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "password must be at least 8 characters")
 		return
 	}
 
 	passwordHash, err := auth.HashPassword(req.Password)
 	if err != nil {
-		http.Error(w, "failed to hash password", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "failed to hash password")
 		return
 	}
 
@@ -216,16 +226,16 @@ func (h *Handler) Initialize(w http.ResponseWriter, r *http.Request) {
 		Save(ctx)
 	if err != nil {
 		if ent.IsConstraintError(err) {
-			http.Error(w, "username already exists", http.StatusConflict)
+			writeJSONError(w, http.StatusConflict, "username already exists")
 			return
 		}
-		http.Error(w, "failed to create initial admin user", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "failed to create initial admin user")
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(userToResponse(u))
+	_ = json.NewEncoder(w).Encode(userToResponse(u))
 }
 
 // ─────────────────────────────────────────────
@@ -762,4 +772,10 @@ func normalizeMountPath(mountPath string) (string, error) {
 		mountPath = "/"
 	}
 	return mountPath, nil
+}
+
+func writeJSONError(w http.ResponseWriter, status int, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
