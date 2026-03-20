@@ -1,28 +1,28 @@
 {{define "backends_list_content"}}
 <div class="container" x-data="backends()">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-        <h1>S3 Backends</h1>
-        <a href="/admin/backends/new" class="btn btn-primary">Add Backend</a>
+        <h1 x-text="$store.app.t('s3Backends')">S3 Backends</h1>
+        <a href="/admin/backends/new" class="btn btn-primary" x-text="$store.app.t('addBackend')">Add Backend</a>
     </div>
 
     <div class="card">
-        <h2>Mount Paths</h2>
-        <p style="color: #6b7280; margin-bottom: 16px;">Multiple backends on the same path = write replication</p>
+        <h2 x-text="$store.app.t('mountPaths')">Mount Paths</h2>
+        <p style="color: var(--text-muted); margin-bottom: 16px;" x-text="$store.app.t('multipleBackendsNote')">Multiple backends on the same path = write replication</p>
 
         <template x-for="(backends, mountPath) in mountPaths" :key="mountPath">
-            <div style="border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 16px; overflow: hidden;">
-                <div style="background: #f9fafb; padding: 12px 16px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center;">
+            <div style="border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 16px; overflow: hidden;">
+                <div style="background: var(--table-header-bg); padding: 12px 16px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
                     <span style="font-weight: 600; font-family: monospace;" x-text="mountPath"></span>
-                    <span class="badge" :class="backends.length > 1 ? 'badge-blue' : 'badge-green'" x-text="backends.length > 1 ? 'Replicated (' + backends.length + ')' : 'Single'"></span>
+                    <span class="badge" :class="backends.length > 1 ? 'badge-blue' : 'badge-green'" x-text="backends.length > 1 ? $store.app.t('replicated') + ' (' + backends.length + ')' : $store.app.t('single')"></span>
                 </div>
                 <table style="margin: 0;">
                     <thead>
                         <tr>
-                            <th>Name</th>
-                            <th>Bucket</th>
-                            <th>Primary</th>
-                            <th>Status</th>
-                            <th>Actions</th>
+                            <th x-text="$store.app.t('name')">Name</th>
+                            <th x-text="$store.app.t('bucket')">Bucket</th>
+                            <th x-text="$store.app.t('primary')">Primary</th>
+                            <th x-text="$store.app.t('status')">Status</th>
+                            <th x-text="$store.app.t('actions')">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -31,16 +31,16 @@
                                 <td x-text="b.name"></td>
                                 <td x-text="b.bucket"></td>
                                 <td>
-                                    <span x-show="b.is_primary" class="badge badge-blue">Primary</span>
-                                    <span x-show="!b.is_primary" style="color: #9ca3af;">-</span>
+                                    <span x-show="b.is_primary" class="badge badge-blue" x-text="$store.app.t('primary')">Primary</span>
+                                    <span x-show="!b.is_primary" style="color: var(--text-muted);">-</span>
                                 </td>
                                 <td>
-                                    <span class="badge" :class="b.is_enabled ? 'badge-green' : 'badge-red'" x-text="b.is_enabled ? 'Active' : 'Disabled'"></span>
+                                    <span class="badge" :class="b.is_enabled ? 'badge-green' : 'badge-red'" x-text="b.is_enabled ? $store.app.t('active') : $store.app.t('disabled')"></span>
                                 </td>
                                 <td class="actions">
-                                    <button class="btn btn-secondary" @click="testBackend(b.id, b.name)">Test</button>
-                                    <a :href="'/admin/backends/' + b.id" class="btn btn-primary">Edit</a>
-                                    <button class="btn btn-danger" @click="deleteBackend(b.id, b.name)">Delete</button>
+                                    <button class="btn btn-secondary" @click="testBackend(b.id, b.name)" x-text="$store.app.t('test')">Test</button>
+                                    <a :href="'/admin/backends/' + b.id" class="btn btn-primary" x-text="$store.app.t('edit')">Edit</a>
+                                    <button class="btn btn-danger" @click="deleteBackend(b.id, b.name)" x-text="$store.app.t('delete')">Delete</button>
                                 </td>
                             </tr>
                         </template>
@@ -49,7 +49,7 @@
             </div>
         </template>
 
-        <p x-show="Object.keys(mountPaths).length === 0" style="padding: 20px; text-align: center; color: #6b7280;">No backends configured.</p>
+        <p x-show="Object.keys(mountPaths).length === 0" style="padding: 20px; text-align: center; color: var(--text-muted);" x-text="$store.app.t('noBackends')">No backends configured.</p>
     </div>
 </div>
 <script>

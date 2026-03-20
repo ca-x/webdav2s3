@@ -1,17 +1,17 @@
 {{define "dashboard_content"}}
 <div class="container" x-data="dashboard()">
-    <h1 style="margin-bottom: 24px;">Dashboard</h1>
+    <h1 x-text="$store.app ? $store.app.t('dashboard') : 'Dashboard'">Dashboard</h1>
 
     <div class="card">
-        <h2>Backend Status</h2>
+        <h2 x-text="$store.app ? $store.app.t('backendStatus') : 'Backend Status'">Backend Status</h2>
         <table>
             <thead>
                 <tr>
-                    <th>Name</th>
-                    <th>Mount Path</th>
-                    <th>Bucket</th>
-                    <th>Status</th>
-                    <th>Read Only</th>
+                    <th x-text="$store.app ? $store.app.t('name') : 'Name'">Name</th>
+                    <th x-text="$store.app ? $store.app.t('mountPath') : 'Mount Path'">Mount Path</th>
+                    <th x-text="$store.app ? $store.app.t('bucket') : 'Bucket'">Bucket</th>
+                    <th x-text="$store.app ? $store.app.t('status') : 'Status'">Status</th>
+                    <th x-text="$store.app ? $store.app.t('readOnly') : 'Read Only'">Read Only</th>
                 </tr>
             </thead>
             <tbody>
@@ -21,29 +21,32 @@
                         <td x-text="b.mount_path"></td>
                         <td x-text="b.bucket"></td>
                         <td>
-                            <span class="badge" :class="b.is_enabled ? 'badge-green' : 'badge-red'" x-text="b.is_enabled ? 'Active' : 'Disabled'"></span>
+                            <span class="badge" :class="b.is_enabled ? 'badge-green' : 'badge-red'" x-text="b.is_enabled ? ($store.app ? $store.app.t('active') : 'Active') : ($store.app ? $store.app.t('disabled') : 'Disabled')"></span>
                         </td>
                         <td>
-                            <span class="badge" :class="b.is_readonly ? 'badge-blue' : 'badge-green'" x-text="b.is_readonly ? 'Read Only' : 'Read/Write'"></span>
+                            <span class="badge" :class="b.is_readonly ? 'badge-blue' : 'badge-green'" x-text="b.is_readonly ? ($store.app ? $store.app.t('readOnly') : 'Read Only') : ($store.app ? $store.app.t('readWrite') : 'Read/Write')"></span>
                         </td>
                     </tr>
                 </template>
             </tbody>
         </table>
-        <p x-show="backends.length === 0" style="padding: 20px; text-align: center; color: #6b7280;">No backends configured. <a href="/admin/backends/new">Add one</a>.</p>
+        <p x-show="backends.length === 0" style="padding: 20px; text-align: center;">
+            <span x-text="'No backends configured.'"></span>
+            <a href="/admin/backends/new" x-text="'Add one'"></a>
+        </p>
     </div>
 
     <div class="card">
-        <h2>Quick Actions</h2>
+        <h2 x-text="$store.app ? $store.app.t('quickActions') : 'Quick Actions'">Quick Actions</h2>
         <div style="display: flex; gap: 12px;">
-            <a href="/admin/backends" class="btn btn-primary">Manage Backends</a>
-            <a href="/admin/backends/new" class="btn btn-secondary">Add Backend</a>
+            <a href="/admin/backends" class="btn btn-primary" x-text="$store.app ? $store.app.t('manageBackends') : 'Manage Backends'">Manage Backends</a>
+            <a href="/admin/backends/new" class="btn btn-secondary" x-text="$store.app ? $store.app.t('addBackend') : 'Add Backend'">Add Backend</a>
         </div>
     </div>
 </div>
 <script>
-function dashboard() {
-    return {
+document.addEventListener('alpine:init', () => {
+    Alpine.data('dashboard', () => ({
         backends: [],
         async init() {
             const token = localStorage.getItem('token');
@@ -56,7 +59,7 @@ function dashboard() {
                 this.backends = await resp.json();
             } catch (e) { console.error(e); }
         }
-    }
-}
+    }));
+});
 </script>
 {{end}}

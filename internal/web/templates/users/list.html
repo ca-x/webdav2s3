@@ -1,18 +1,18 @@
 {{define "users_list_content"}}
 <div class="container" x-data="users()">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-        <h1>Users</h1>
-        <button class="btn btn-primary" @click="showModal = true; editingUser = null; userForm = {username: '', password: '', role: 'user'}">Add User</button>
+        <h1 x-text="$store.app.t('users')">Users</h1>
+        <button class="btn btn-primary" @click="showModal = true; editingUser = null; userForm = {username: '', password: '', role: 'user'}" x-text="$store.app.t('addUser')">Add User</button>
     </div>
 
     <div class="card">
         <table>
             <thead>
                 <tr>
-                    <th>Username</th>
-                    <th>Role</th>
-                    <th>Status</th>
-                    <th>Actions</th>
+                    <th x-text="$store.app.t('username')">Username</th>
+                    <th x-text="$store.app.t('role')">Role</th>
+                    <th x-text="$store.app.t('status')">Status</th>
+                    <th x-text="$store.app.t('actions')">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -20,14 +20,14 @@
                     <tr>
                         <td x-text="u.username"></td>
                         <td>
-                            <span class="badge" :class="u.role === 'admin' ? 'badge-blue' : 'badge-green'" x-text="u.role"></span>
+                            <span class="badge" :class="u.role === 'admin' ? 'badge-blue' : 'badge-green'" x-text="u.role === 'admin' ? $store.app.t('admin') : $store.app.t('user')"></span>
                         </td>
                         <td>
-                            <span class="badge" :class="u.is_enabled ? 'badge-green' : 'badge-red'" x-text="u.is_enabled ? 'Active' : 'Disabled'"></span>
+                            <span class="badge" :class="u.is_enabled ? 'badge-green' : 'badge-red'" x-text="u.is_enabled ? $store.app.t('active') : $store.app.t('disabled')"></span>
                         </td>
                         <td class="actions">
-                            <button class="btn btn-primary" @click="editUser(u)">Edit</button>
-                            <button class="btn btn-danger" @click="deleteUser(u.id, u.username)">Delete</button>
+                            <button class="btn btn-primary" @click="editUser(u)" x-text="$store.app.t('edit')">Edit</button>
+                            <button class="btn btn-danger" @click="deleteUser(u.id, u.username)" x-text="$store.app.t('delete')">Delete</button>
                         </td>
                     </tr>
                 </template>
@@ -36,33 +36,37 @@
     </div>
 
     <!-- Modal -->
-    <div x-show="showModal" style="position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;" @click.self="showModal = false">
+    <div x-show="showModal" class="modal-overlay" @click.self="showModal = false">
         <div class="card" style="width: 400px;" @click.stop>
-            <h2 x-text="editingUser ? 'Edit User' : 'Add User'"></h2>
+            <h2 x-text="editingUser ? $store.app.t('editUser') : $store.app.t('addUser')"></h2>
             <form @submit.prevent="saveUser">
                 <div class="form-group">
-                    <label>Username</label>
+                    <label x-text="$store.app.t('username')">Username</label>
                     <input type="text" x-model="userForm.username" required :disabled="editingUser">
                 </div>
                 <div class="form-group">
-                    <label>Password <span x-show="editingUser">(leave empty to keep current)</span></label>
+                    <label>
+                        <span x-text="$store.app.t('password')">Password</span>
+                        <span x-show="editingUser" x-text="' ' + $store.app.t('leaveEmptyToKeepCurrent')"></span>
+                    </label>
                     <input type="password" x-model="userForm.password" :required="!editingUser">
                 </div>
                 <div class="form-group">
-                    <label>Role</label>
+                    <label x-text="$store.app.t('role')">Role</label>
                     <select x-model="userForm.role">
-                        <option value="user">User</option>
-                        <option value="admin">Admin</option>
+                        <option value="user" x-text="$store.app.t('user')">User</option>
+                        <option value="admin" x-text="$store.app.t('admin')">Admin</option>
                     </select>
                 </div>
                 <div class="form-group" x-show="editingUser">
                     <label class="checkbox-label">
-                        <input type="checkbox" x-model="userForm.is_enabled"> Enabled
+                        <input type="checkbox" x-model="userForm.is_enabled">
+                        <span x-text="$store.app.t('enabled')">Enabled</span>
                     </label>
                 </div>
                 <div style="display: flex; gap: 12px;">
-                    <button type="submit" class="btn btn-primary">Save</button>
-                    <button type="button" class="btn btn-secondary" @click="showModal = false">Cancel</button>
+                    <button type="submit" class="btn btn-primary" x-text="$store.app.t('save')">Save</button>
+                    <button type="button" class="btn btn-secondary" @click="showModal = false" x-text="$store.app.t('cancel')">Cancel</button>
                 </div>
             </form>
         </div>

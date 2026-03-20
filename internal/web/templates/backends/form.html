@@ -1,6 +1,6 @@
 {{define "backends_form_content"}}
 <div class="container" x-data="backendForm()">
-    <h1 style="margin-bottom: 24px;" x-text="isEdit ? 'Edit Backend' : 'Add Backend'"></h1>
+    <h1 style="margin-bottom: 24px;" x-text="isEdit ? $store.app.t('editBackend') : $store.app.t('addBackend')"></h1>
 
     <div class="card">
         <form @submit.prevent="save">
@@ -17,7 +17,7 @@
                             <option :value="path">
                         </template>
                     </datalist>
-                    <small style="color: #6b7280;">Enter existing path to add replication</small>
+                    <small style="color: var(--text-muted);">Enter existing path to add replication</small>
                 </div>
             </div>
 
@@ -65,24 +65,24 @@
                 </label>
                 <label class="checkbox-label">
                     <input type="checkbox" x-model="form.is_primary">
-                    Primary (for reads)
+                    <span x-text="$store.app.t('primary')">Primary</span> (for reads)
                 </label>
                 <label class="checkbox-label">
                     <input type="checkbox" x-model="form.is_enabled">
-                    Enabled
+                    <span x-text="$store.app.t('enabled')">Enabled</span>
                 </label>
                 <label class="checkbox-label">
                     <input type="checkbox" x-model="form.is_readonly">
-                    Read Only
+                    <span x-text="$store.app.t('readOnly')">Read Only</span>
                 </label>
             </div>
 
             <p class="error" x-show="error" x-text="error"></p>
 
             <div style="display: flex; gap: 12px;">
-                <button type="submit" class="btn btn-primary">Save</button>
-                <button type="button" class="btn btn-secondary" @click="testConnection">Test Connection</button>
-                <a href="/admin/backends" class="btn btn-secondary">Cancel</a>
+                <button type="submit" class="btn btn-primary" x-text="$store.app.t('save')">Save</button>
+                <button type="button" class="btn btn-secondary" @click="testConnection" x-text="$store.app.t('testConnection')">Test Connection</button>
+                <a href="/admin/backends" class="btn btn-secondary" x-text="$store.app.t('cancel')">Cancel</a>
             </div>
         </form>
     </div>

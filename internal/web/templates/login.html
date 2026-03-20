@@ -1,76 +1,75 @@
 {{define "login_content"}}
-<div class="login-container">
+<div class="login-container" x-data="login()">
     <div class="card login-card">
-        <h2 style="text-align: center; margin-bottom: 24px;">Login</h2>
-        <form x-data="{ error: '' }" @submit.prevent="submit">
+        <h2 style="text-align: center; margin-bottom: 24px;" x-text="$store.app.t('login')">Login</h2>
+        <form @submit.prevent="submit">
             <div class="form-group">
-                <label for="username">Username</label>
+                <label for="username" x-text="$store.app.t('username')">Username</label>
                 <input type="text" id="username" name="username" required x-model="username">
             </div>
             <div class="form-group">
-                <label for="password">Password</label>
+                <label for="password" x-text="$store.app.t('password')">Password</label>
                 <input type="password" id="password" name="password" required x-model="password">
             </div>
             <p class="error" x-show="error" x-text="error"></p>
-            <button type="submit" class="btn btn-primary" style="width: 100%;">Login</button>
+            <button type="submit" class="btn btn-primary" style="width: 100%;" x-text="$store.app.t('login')">Login</button>
         </form>
     </div>
 </div>
 <script>
-async function parseErrorMessage(resp, fallback) {
-    const text = await resp.text();
-    if (!text) return fallback;
-    try {
-        const obj = JSON.parse(text);
-        return obj.error || fallback;
-    } catch (_) {
-        return text;
-    }
-}
-
-async function ensureInitialized() {
-    try {
-        const resp = await fetch('/api/v1/setup/status');
-        if (!resp.ok) return;
-        const status = await resp.json();
-        if (!status.initialized) {
-            window.location.href = '/admin/setup';
+document.addEventListener('alpine:init', () => {
+    Alpine.data('login', () => ({
+        username: '',
+        password: '',
+        error: '',
+        async init() {
+            await this.ensureInitialized();
+        },
+        async ensureInitialized() {
+            try {
+                const resp = await fetch('/api/v1/setup/status');
+                if (!resp.ok) return;
+                const status = await resp.json();
+                if (!status.initialized) {
+                    window.location.href = '/admin/setup';
+                }
+            } catch (_) {}
+        },
+        async parseErrorMessage(resp, fallback) {
+            const text = await resp.text();
+            if (!text) return fallback;
+            try {
+                const obj = JSON.parse(text);
+                return obj.error || fallback;
+            } catch (_) {
+                return text;
+            }
+        },
+        async submit() {
+            this.error = '';
+            const data = {
+                username: this.username,
+                password: this.password
+            };
+            try {
+                const resp = await fetch('/api/v1/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                if (resp.ok) {
+                    const result = await resp.json();
+                    localStorage.setItem('token', result.token);
+                    localStorage.setItem('user', JSON.stringify(result.user));
+                    window.location.href = '/admin/';
+                } else {
+                    this.error = await this.parseErrorMessage(resp, Alpine.store('app').t('loginFailed'));
+                }
+            } catch (err) {
+                this.error = Alpine.store('app').t('networkError');
+            }
         }
-    } catch (_) {
-        // no-op
-    }
-}
-
-document.addEventListener('DOMContentLoaded', function() {
-    ensureInitialized();
-});
-
-document.querySelector('form').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    const form = this;
-    const data = {
-        username: form.username.value,
-        password: form.password.value
-    };
-    try {
-        const resp = await fetch('/api/v1/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-        if (resp.ok) {
-            const result = await resp.json();
-            localStorage.setItem('token', result.token);
-            localStorage.setItem('user', JSON.stringify(result.user));
-            window.location.href = '/admin/';
-        } else {
-            form.querySelector('.error').textContent = await parseErrorMessage(resp, 'Login failed');
-            form.querySelector('.error').style.display = 'block';
-        }
-    } catch (err) {
-        form.querySelector('.error').textContent = 'Network error';
-        form.querySelector('.error').style.display = 'block';
-    }
+    }));
 });
 </script>
 {{end}}
