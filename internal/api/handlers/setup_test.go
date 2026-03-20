@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -30,7 +29,7 @@ func newSetupTestHandler(t *testing.T) (*Handler, *ent.Client) {
 		_ = db.Close()
 	})
 
-	if err := db.Schema.Create(context.Background()); err != nil {
+	if err := db.Schema.Create(t.Context()); err != nil {
 		t.Fatalf("migrate schema: %v", err)
 	}
 
@@ -50,7 +49,7 @@ func TestInitializeCreatesFirstAdminUser(t *testing.T) {
 		t.Fatalf("expected status %d, got %d, body=%s", http.StatusCreated, rec.Code, rec.Body.String())
 	}
 
-	u, err := db.User.Query().Only(context.Background())
+	u, err := db.User.Query().Only(t.Context())
 	if err != nil {
 		t.Fatalf("query user: %v", err)
 	}
@@ -117,7 +116,7 @@ func TestGetSetupStatus(t *testing.T) {
 		SetPasswordHash(passwordHash).
 		SetRole(user.RoleAdmin).
 		SetIsEnabled(true).
-		Save(context.Background()); err != nil {
+		Save(t.Context()); err != nil {
 		t.Fatalf("create user: %v", err)
 	}
 

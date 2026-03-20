@@ -35,7 +35,7 @@ func (fi *s3FileInfo) Mode() os.FileMode {
 }
 func (fi *s3FileInfo) ModTime() time.Time { return fi.modTime }
 func (fi *s3FileInfo) IsDir() bool        { return fi.isDir }
-func (fi *s3FileInfo) Sys() interface{}   { return nil }
+func (fi *s3FileInfo) Sys() any   { return nil }
 
 // ─────────────────────────────────────────────
 // s3File – writable (buffers body, uploads on Close)

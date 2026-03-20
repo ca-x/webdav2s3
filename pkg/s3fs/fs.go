@@ -519,12 +519,10 @@ func mapS3Error(err error) error {
 	if err == nil {
 		return nil
 	}
-	var nf *types.NoSuchKey
-	if errors.As(err, &nf) {
+	if _, ok := errors.AsType[*types.NoSuchKey](err); ok {
 		return os.ErrNotExist
 	}
-	var nb *types.NoSuchBucket
-	if errors.As(err, &nb) {
+	if _, ok := errors.AsType[*types.NoSuchBucket](err); ok {
 		return os.ErrNotExist
 	}
 	return err
