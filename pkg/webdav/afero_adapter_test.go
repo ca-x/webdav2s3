@@ -1,7 +1,6 @@
 package webdav
 
 import (
-	"context"
 	"os"
 	"testing"
 
@@ -44,7 +43,7 @@ func TestMkdirUsesMkdirNotMkdirAll(t *testing.T) {
 	spy := newSpyFs()
 	adapter := &AferoFS{fs: spy}
 
-	if err := adapter.Mkdir(context.Background(), "/parent/child", 0o755); err != nil {
+	if err := adapter.Mkdir(t.Context(), "/parent/child", 0o755); err != nil {
 		t.Fatalf("Mkdir() error: %v", err)
 	}
 
@@ -62,7 +61,7 @@ func TestRenameDoesNotCreateParentAndCleansPath(t *testing.T) {
 	spy := newSpyFs()
 	adapter := &AferoFS{fs: spy}
 
-	if err := adapter.Rename(context.Background(), "a/../src.txt", "dst/../target.txt"); err != nil {
+	if err := adapter.Rename(t.Context(), "a/../src.txt", "dst/../target.txt"); err != nil {
 		t.Fatalf("Rename() error: %v", err)
 	}
 
